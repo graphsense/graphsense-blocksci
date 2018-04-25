@@ -1,4 +1,3 @@
-
 # BlockSci
 
 ## Docker container
@@ -28,7 +27,7 @@ To parse the binary Bitcoin data from directly from Leveldb
 docker exec -ti blocksci blocksci_parser --output-directory /var/data/blocksci_data update disk --coin-directory /var/data/block_data
 ```
 
-To use BlockSci interactively in from iPython, execute
+To use BlockSci interactively in iPython, execute
 ```
 docker exec -ti blocksci ipython3
 

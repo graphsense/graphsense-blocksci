@@ -1,0 +1,29 @@
+
+DROP KEYSPACE IF EXISTS graphsense;
+CREATE KEYSPACE graphsense WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1 };
+USE graphsense;
+
+CREATE TABLE block (
+    height int PRIMARY KEY,
+    block_hash blob,
+    timestamp int,
+    no_transactions int
+);
+
+CREATE TYPE tx_input_output (
+    address list<text>,
+    value bigint
+);
+
+CREATE TABLE transaction (
+    tx_prefix text,
+    tx_hash blob,
+    height int,
+    timestamp int,
+    coinbase boolean,
+    total_input bigint,
+    total_output bigint,
+    inputs list<FROZEN<tx_input_output>>,
+    outputs list<FROZEN<tx_input_output>>,
+    PRIMARY KEY (tx_prefix, tx_hash)
+);

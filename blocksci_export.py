@@ -1,4 +1,8 @@
+from abc import ABC
 from argparse import ArgumentParser
+from datetime import date
+from functools import wraps
+from itertools import islice
 from multiprocessing import Pool, Value
 import time
 
@@ -8,44 +12,55 @@ from cassandra.cluster import Cluster
 from cassandra.query import BatchStatement
 
 
-class TxQueryManager(object):
+def timing(f):
+    @wraps(f)
+    def wrap(*args, **kw):
+        t1 = time.time()
+        result = f(*args, **kw)
+        t2 = time.time()
+        print('\n... %.1f sec\n' % (t2 - t1))
+        return result
+    return wrap
+
+
+class QueryManager(ABC):
 
     # chosen to match the default in execute_concurrent_with_args
     concurrency = 100
-    counter = Value("d", 0)
+    counter = Value('d', 0)
 
-    def __init__(self, cluster, keyspace, chain, process_count=1):
+    def __init__(self, cluster, keyspace, chain, cql_str, process_count=1):
         self.process_count = process_count
         self.pool = Pool(processes=process_count,
                          initializer=self._setup,
-                         initargs=(cluster, chain, keyspace))
+                         initargs=(cluster, chain, keyspace, cql_str))
 
     @classmethod
-    def _setup(cls, cluster, chain, keyspace):
+    def _setup(cls, cluster, chain, keyspace, cql_str):
         cls.chain = chain
-        #cls.cluster = Cluster(cluster_nodes)
         cls.session = cluster.connect()
         cls.session.default_timeout = 60
         cls.session.set_keyspace(keyspace)
         cls.session.default_consistency_level = ConsistencyLevel.LOCAL_ONE
-
-        cql_str = """INSERT INTO transaction
-                         (tx_prefix, tx_hash, height, timestamp, coinbase,
-                          total_input, total_output, inputs, outputs)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
         cls.prepared_stmt = cls.session.prepare(cql_str)
 
     def close_pool(self):
         self.pool.close()
         self.pool.join()
 
-    def insert(self, params):
-        self.pool.map(_multiprocess_insert,
-                      chunk(params, self.process_count))
-                      #self.concurrency)
+    @timing
+    def execute(self, fun, params):
+        self.pool.map(fun, chunk(params, self.process_count))
 
     @classmethod
-    def insert_tx(cls, params):
+    def insert(cls, params):
+        return
+
+
+class TxQueryManager(QueryManager):
+
+    @classmethod
+    def insert(cls, params):
 
         idx_start, idx_end = params
 
@@ -67,41 +82,67 @@ class TxQueryManager(object):
                 count = 0
                 batch_stmt.clear()
 
-                print("#tx {:,.0f}".format(cls.counter.value), end="\r")
+                print('#tx {:,.0f}'.format(cls.counter.value), end='\r')
                 with cls.counter.get_lock():
                     cls.counter.value += batch_size
 
 
-def _multiprocess_insert(params):
-    return TxQueryManager.insert_tx(params)
+class BlockTxQueryManager(QueryManager):
+
+    @classmethod
+    def insert(cls, params):
+
+        idx_start, idx_end = params
+
+        batch_size = 50
+        count = 0
+        for index in range(idx_start, idx_end):
+
+            block = cls.chain[index]
+            block_tx = [block.height, [tx_stats(x) for x in block.txes]]
+
+            if count == 0:
+                batch_stmt = BatchStatement()
+
+            batch_stmt.add(cls.prepared_stmt, block_tx)
+
+            count += 1
+
+            if (count % batch_size) == 0:
+                cls.session.execute(batch_stmt)
+                count = 0
+                batch_stmt.clear()
+
+                print('#blocks {:,.0f}'.format(cls.counter.value), end='\r')
+                with cls.counter.get_lock():
+                    cls.counter.value += batch_size
 
 
-def insert_blocks(cluster, keyspace, chain):
+@timing
+def insert(cluster, keyspace, cql_stmt, generator, batch_size):
     session = cluster.connect(keyspace)
     session.default_timeout = 60
     session.default_consistency_level = ConsistencyLevel.LOCAL_ONE
+    prepared_stmt = session.prepare(cql_stmt)
+    batch_stmt = BatchStatement()
 
-    cql_str = """INSERT INTO block
-                     (height, block_hash, timestamp, no_transactions)
-                 VALUES (?, ?, ?, ?)"""
-    prepared_stmt = session.prepare(cql_str)
+    values = take(batch_size, generator)
     count = 0
+    while values:
 
-    batch_size = 1000
-    last_block = len(chain)
-    print("last_block %d:" % last_block)
-
-    for index in range(0, last_block, batch_size):
-        batch_stmt = BatchStatement()
-        values = block_batch(chain[index:(index + batch_size)])
         batch_stmt.add_all([prepared_stmt]*batch_size, values)
         session.execute_async(batch_stmt)
-        batch_stmt.clear()
-        print("%.1f%%" % (index/last_block*100), end="\r")
-    else:
-        print()
 
-    session.cluster.shutdown()
+        values = take(batch_size, generator)
+        batch_stmt.clear()
+        if (count % 10000) == 0:
+            print('#blocks {:,.0f}'.format(count), end='\r')
+        count += batch_size
+
+
+def take(n, iterable):
+    '''Return first n items of the iterable as a list'''
+    return list(islice(iterable, n))
 
 
 def chunk(n, k):
@@ -126,11 +167,11 @@ def addr_str(addr_obj):
     return(res)
 
 
-def block_batch(block):
-    return zip(block.height,
-               (x.tobytes() for x in block.hash),
-               block.timestamp,
-               (len(x) for x in block))
+def block_summary(block):
+    return (block.height,
+            bytearray.fromhex(str(block.hash)),
+            block.timestamp,
+            len(block))
 
 
 def tx_stats(tx):
@@ -142,53 +183,85 @@ def tx_stats(tx):
 
 
 def tx_summary(tx):
-   tx_inputs = zip([addr_str(x.address) for x in tx.inputs.all],
-                   [x.value for x in tx.inputs.all])
-   tx_outputs = zip([addr_str(x.address) for x in tx.outputs.all],
-                    [x.value for x in tx.outputs.all])
-   return (str(tx.hash)[:5],
-           bytearray.fromhex(str(tx.hash)),
-           tx.block_height,
-           int(tx.block_time.timestamp()),
-           tx.is_coinbase,
-           tx.input_value,
-           tx.output_value,
-           list(tx_inputs),
-           list(tx_outputs))
+    tx_inputs = zip([addr_str(x.address) for x in tx.inputs.all],
+                    [x.value for x in tx.inputs.all])
+    tx_outputs = zip([addr_str(x.address) for x in tx.outputs.all],
+                     [x.value for x in tx.outputs.all])
+    return (str(tx.hash)[:5],
+            bytearray.fromhex(str(tx.hash)),
+            tx.block_height,
+            int(tx.block_time.timestamp()),
+            tx.is_coinbase,
+            tx.input_value,
+            tx.output_value,
+            list(tx_inputs),
+            list(tx_outputs))
 
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument("-c", "--cassandra", dest="cassandra",
-                        help="cassandra nodes (comma separated list of nodes)",
-                        default="localhost")
-    parser.add_argument("-k", "--keyspace", dest="keyspace",
+    parser.add_argument('-c', '--cassandra', dest='cassandra',
+                        default='localhost', metavar='CASSANDRA_HOSTS',
+                        help='cassandra nodes (comma separated list of nodes)')
+    parser.add_argument('-k', '--keyspace', dest='keyspace',
                         required=True,
-                        help="keyspace to import data to")
-    parser.add_argument("-b", "--blocksci_data", dest="blocksci_data",
+                        help='keyspace to import data to')
+    parser.add_argument('-b', '--blocksci_data', dest='blocksci_data',
                         required=True,
-                        help="source directory for raw JSON block dumps")
-    parser.add_argument("-p", "--processes", dest="num_proc",
+                        help='source directory for raw JSON block dumps')
+    parser.add_argument('-p', '--processes', dest='num_proc',
                         type=int, default=1,
-                        help="number of processes")
+                        help='number of processes')
 
     args = parser.parse_args()
 
     chain = blocksci.Blockchain(args.blocksci_data)
+    num_blocks = len(chain[:-6])
     num_tx = chain[-6].txes.all[-1].index
 
-    cluster = Cluster(args.cassandra.split(","))
+    cluster = Cluster(args.cassandra.split(','))
 
-    qm = TxQueryManager(cluster, args.keyspace, chain, args.num_proc)
-    start = time.time()
-    print("\nIngest {:,.0f} transactions".format(num_tx))
-    qm.insert(num_tx)
-    delta = time.time() - start
-    print("\n%.1fs" % delta)
+    # block transactions
+    print('Block transactions ({:,.0f} blocks)'.format(num_blocks))
+    cql_str = '''INSERT INTO block_transactions (height, txs) VALUES (?, ?)'''
+    qm = BlockTxQueryManager(cluster, args.keyspace, chain, cql_str,
+                             args.num_proc)
+    qm.execute(BlockTxQueryManager.insert, num_blocks)
+    qm.close_pool()
 
-    print("Ingest %d blocks" % len(chain[:-6]))
-    insert_blocks(cluster, args.keyspace, chain[:-6])
+    # transactions
+    print('Transactions ({:,.0f} tx)'.format(num_tx))
+    cql_str = '''INSERT INTO transaction
+                 (tx_prefix, tx_hash, height, timestamp, coinbase,
+                  total_input, total_output, inputs, outputs)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'''
+    qm = TxQueryManager(cluster, args.keyspace, chain, cql_str,
+                        args.num_proc)
+    qm.execute(TxQueryManager.insert, num_tx)
+    qm.close_pool()
+
+    # blocks
+    print('Ingest {:,.0f} blocks'.format(len(chain[:-6])))
+    cql_str = '''INSERT INTO block
+                 (height, block_hash, timestamp, no_transactions)
+                 VALUES (?, ?, ?, ?)'''
+    generator = (block_summary(x) for x in chain)
+    insert(cluster, args.keyspace, cql_str, generator, 1000)
+
+    # exchange rates
+    print('Exchange rates')
+    cql_str = '''INSERT INTO exchange_rates (height, eur, usd)
+                 VALUES (?, ?, ?)'''
+    cc_eur = blocksci.currency.CurrencyConverter(currency='EUR')
+    cc_usd = blocksci.currency.CurrencyConverter(currency='USD')
+    generator = ((elem.height,
+                  cc_usd.exchangerate(date.fromtimestamp(elem.timestamp)),
+                  cc_eur.exchangerate(date.fromtimestamp(elem.timestamp)))
+                 for elem in chain)
+    insert(cluster, args.keyspace, cql_str, generator, 1000)
+
+    cluster.shutdown()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

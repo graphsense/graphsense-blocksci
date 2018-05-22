@@ -3,6 +3,12 @@ DROP KEYSPACE IF EXISTS graphsense;
 CREATE KEYSPACE graphsense WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1 };
 USE graphsense;
 
+CREATE TABLE exchange_rates (
+    height int PRIMARY KEY,
+    eur    double,
+    usd    double
+);
+
 CREATE TABLE block (
     height int PRIMARY KEY,
     block_hash blob,
@@ -26,4 +32,17 @@ CREATE TABLE transaction (
     inputs list<FROZEN<tx_input_output>>,
     outputs list<FROZEN<tx_input_output>>,
     PRIMARY KEY (tx_prefix, tx_hash)
+);
+
+ CREATE TYPE tx_summary (
+     tx_hash blob,
+     no_inputs int,
+     no_outputs int,
+     total_input bigint,
+     total_output bigint
+ );
+ 
+ CREATE TABLE block_transactions (
+     height int PRIMARY KEY,
+     txs list<FROZEN<tx_summary>>
 );

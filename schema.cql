@@ -1,7 +1,7 @@
 
-DROP KEYSPACE IF EXISTS graphsense;
-CREATE KEYSPACE graphsense WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1 };
-USE graphsense;
+DROP KEYSPACE IF EXISTS blocksci_test;
+CREATE KEYSPACE blocksci_test WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1 };
+USE blocksci_test;
 
 CREATE TABLE exchange_rates (
     height int PRIMARY KEY,
@@ -18,12 +18,14 @@ CREATE TABLE block (
 
 CREATE TYPE tx_input_output (
     address list<text>,
-    value bigint
+    value bigint,
+    tx_type smallint
 );
 
 CREATE TABLE transaction (
     tx_prefix text,
     tx_hash blob,
+    tx_index bigint,
     height int,
     timestamp int,
     coinbase boolean,
@@ -34,15 +36,15 @@ CREATE TABLE transaction (
     PRIMARY KEY (tx_prefix, tx_hash)
 );
 
- CREATE TYPE tx_summary (
-     tx_hash blob,
-     no_inputs int,
-     no_outputs int,
-     total_input bigint,
-     total_output bigint
- );
+CREATE TYPE tx_summary (
+    tx_hash blob,
+    no_inputs int,
+    no_outputs int,
+    total_input bigint,
+    total_output bigint
+);
  
- CREATE TABLE block_transactions (
+CREATE TABLE block_transactions (
      height int PRIMARY KEY,
      txs list<FROZEN<tx_summary>>
 );

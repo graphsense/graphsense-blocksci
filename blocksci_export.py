@@ -12,6 +12,21 @@ from cassandra.cluster import Cluster
 from cassandra.query import BatchStatement
 
 
+# dict(zip(blocksci.address_type.types,
+#      range(1, len(blocksci.address_type.types) + 1)))
+address_type = {
+  'address_type.nonstandard': 1,
+  'address_type.pubkey': 2,
+  'address_type.pubkeyhash': 3,
+  'address_type.multisig_pubkey': 4,
+  'address_type.scripthash': 5,
+  'address_type.multisig': 6,
+  'address_type.nulldata': 7,
+  'address_type.witness_pubkeyhash': 8,
+  'address_type.witness_scripthash': 9
+}
+
+
 def timing(f):
     @wraps(f)
     def wrap(*args, **kw):
@@ -65,16 +80,13 @@ class TxQueryManager(QueryManager):
         idx_start, idx_end = params
 
         batch_size = 1000
+
         count = 0
+        batch_stmt = BatchStatement()
         for index in range(idx_start, idx_end):
 
             tx = blocksci.Tx(index, cls.chain)
-
-            if count == 0:
-                batch_stmt = BatchStatement()
-
             batch_stmt.add(cls.prepared_stmt, tx_summary(tx))
-
             count += 1
 
             if (count % batch_size) == 0:
@@ -85,6 +97,8 @@ class TxQueryManager(QueryManager):
                 print('#tx {:,.0f}'.format(cls.counter.value), end='\r')
                 with cls.counter.get_lock():
                     cls.counter.value += batch_size
+        else:
+            cls.session.execute(batch_stmt)
 
 
 class BlockTxQueryManager(QueryManager):
@@ -95,15 +109,13 @@ class BlockTxQueryManager(QueryManager):
         idx_start, idx_end = params
 
         batch_size = 50
+
         count = 0
+        batch_stmt = BatchStatement()
         for index in range(idx_start, idx_end):
 
             block = cls.chain[index]
             block_tx = [block.height, [tx_stats(x) for x in block.txes]]
-
-            if count == 0:
-                batch_stmt = BatchStatement()
-
             batch_stmt.add(cls.prepared_stmt, block_tx)
 
             count += 1
@@ -116,6 +128,8 @@ class BlockTxQueryManager(QueryManager):
                 print('#blocks {:,.0f}'.format(cls.counter.value), end='\r')
                 with cls.counter.get_lock():
                     cls.counter.value += batch_size
+        else:
+            cls.session.execute(batch_stmt)
 
 
 @timing
@@ -129,7 +143,6 @@ def insert(cluster, keyspace, cql_stmt, generator, batch_size):
     values = take(batch_size, generator)
     count = 0
     while values:
-
         batch_stmt.add_all([prepared_stmt]*batch_size, values)
         session.execute_async(batch_stmt)
 
@@ -145,14 +158,17 @@ def take(n, iterable):
     return list(islice(iterable, n))
 
 
-def chunk(n, k):
-    '''Split the number range [0, n] into k evenly sized chunks'''
+def chunk(val_range, k):
+    '''Split the number range val_range=[n1, n2] into k evenly sized chunks'''
 
+    n1, n2 = val_range
+    assert n2 > n1
+    n = n2 - n1
     assert 0 < k <= n
     s, r = divmod(n, k)
     t = s + 1
-    return ([(p, p+t) for p in range(0, r*t, t)] +
-            [(p, p+s) for p in range(r*t, n, s)])
+    return ([(n1+p, n1+p+t) for p in range(0, r*t, t)] +
+            [(n1+p, n1+p+s) for p in range(r*t, n, s)])
 
 
 def addr_str(addr_obj):
@@ -182,13 +198,16 @@ def tx_stats(tx):
             tx.output_value)
 
 
+def tx_io_summary(x):
+    return [addr_str(x.address), x.value, address_type[repr(x.address_type)]]
+
+
 def tx_summary(tx):
-    tx_inputs = zip([addr_str(x.address) for x in tx.inputs.all],
-                    [x.value for x in tx.inputs.all])
-    tx_outputs = zip([addr_str(x.address) for x in tx.outputs.all],
-                     [x.value for x in tx.outputs.all])
+    tx_inputs = [tx_io_summary(x) for x in tx.inputs.all]
+    tx_outputs = [tx_io_summary(x) for x in tx.outputs.all]
     return (str(tx.hash)[:5],
             bytearray.fromhex(str(tx.hash)),
+            tx.index,
             tx.block_height,
             int(tx.block_time.timestamp()),
             tx.is_coinbase,
@@ -199,25 +218,41 @@ def tx_summary(tx):
 
 
 def main():
-    parser = ArgumentParser()
-    parser.add_argument('-c', '--cassandra', dest='cassandra',
-                        default='localhost', metavar='CASSANDRA_HOSTS',
-                        help='cassandra nodes (comma separated list of nodes)')
-    parser.add_argument('-k', '--keyspace', dest='keyspace',
-                        required=True,
-                        help='keyspace to import data to')
+    parser = ArgumentParser(description='Export dumped BlockSci data '
+                                        'to Apache Cassandra',
+                            epilog='GraphSense - http://graphsense.info')
     parser.add_argument('-b', '--blocksci_data', dest='blocksci_data',
                         required=True,
-                        help='source directory for raw JSON block dumps')
+                        help='directory containing parsed BlockSci data')
+    parser.add_argument('-c', '--cassandra', dest='cassandra',
+                        default='localhost', metavar='CASSANDRA_HOSTS',
+                        help='Cassandra nodes (comma separated list of nodes'
+                             '; default "localhost")')
+    parser.add_argument('-k', '--keyspace', dest='keyspace',
+                        required=True,
+                        help='Cassandra keyspace')
     parser.add_argument('-p', '--processes', dest='num_proc',
                         type=int, default=1,
-                        help='number of processes')
+                        help='number of processes (default 1)')
+    parser.add_argument('-s', '--start_index', dest='start_index',
+                        type=int, default=0,
+                        help='start index of the blocks to export '
+                             '(default 0)')
+    parser.add_argument('-e', '--end_index', dest='end_index',
+                        type=int, default=-1,
+                        help='only blocks with height smaller than this '
+                             'value are included; a negative index counts '
+                             'back from the end (default -1)')
 
     args = parser.parse_args()
 
     chain = blocksci.Blockchain(args.blocksci_data)
-    num_blocks = len(chain[:-6])
-    num_tx = chain[-6].txes.all[-1].index
+    block_range = chain[args.start_index:args.end_index]
+    num_blocks = len(block_range)
+    block_index_range = (block_range[0].height, block_range[-1].height + 1)
+    tx_index_range = (block_range.txes.all[0].index,
+                      block_range.txes.all[-1].index + 1)
+    num_tx = tx_index_range[1] - tx_index_range[0] + 1
 
     cluster = Cluster(args.cassandra.split(','))
 
@@ -226,26 +261,26 @@ def main():
     cql_str = '''INSERT INTO block_transactions (height, txs) VALUES (?, ?)'''
     qm = BlockTxQueryManager(cluster, args.keyspace, chain, cql_str,
                              args.num_proc)
-    qm.execute(BlockTxQueryManager.insert, num_blocks)
+    qm.execute(BlockTxQueryManager.insert, block_index_range)
     qm.close_pool()
 
     # transactions
     print('Transactions ({:,.0f} tx)'.format(num_tx))
     cql_str = '''INSERT INTO transaction
-                 (tx_prefix, tx_hash, height, timestamp, coinbase,
-                  total_input, total_output, inputs, outputs)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'''
+                 (tx_prefix, tx_hash, tx_index, height, timestamp,
+                  coinbase, total_input, total_output, inputs, outputs)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
     qm = TxQueryManager(cluster, args.keyspace, chain, cql_str,
                         args.num_proc)
-    qm.execute(TxQueryManager.insert, num_tx)
+    qm.execute(TxQueryManager.insert, tx_index_range)
     qm.close_pool()
 
     # blocks
-    print('Ingest {:,.0f} blocks'.format(len(chain[:-6])))
+    print('Ingest {:,.0f} blocks'.format(num_blocks))
     cql_str = '''INSERT INTO block
                  (height, block_hash, timestamp, no_transactions)
                  VALUES (?, ?, ?, ?)'''
-    generator = (block_summary(x) for x in chain)
+    generator = (block_summary(x) for x in block_range)
     insert(cluster, args.keyspace, cql_str, generator, 1000)
 
     # exchange rates
@@ -257,9 +292,9 @@ def main():
     generator = ((elem.height,
                   cc_usd.exchangerate(date.fromtimestamp(elem.timestamp)),
                   cc_eur.exchangerate(date.fromtimestamp(elem.timestamp)))
-                 for elem in chain)
+                 for elem in block_range
+                 if date.fromtimestamp(elem.timestamp) < date.today())
     insert(cluster, args.keyspace, cql_str, generator, 1000)
-
     cluster.shutdown()
 
 

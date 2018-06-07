@@ -15,9 +15,4 @@ if [ ! -d $2 ]; then
     exit 1
 fi
 
-docker stop blocksci
-docker rm blocksci
-docker run --restart=always -d --name blocksci \
-    -v $1:/var/data/block_data -v $2:/var/data/blocksci_data \
-    -it blocksci
-docker ps -a
+docker exec -ti blocksci blocksci_parser --output-directory $2 update --max-block -6 disk --coin-directory $1

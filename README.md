@@ -21,15 +21,15 @@ data directories.
 
 Attach docker container
 ```
-docker exec -ti blocksci /bin/bash
+docker exec -ti blocksci_btc /bin/bash
 ```
-or `./docker/attach.sh`
+or `./docker/attach.sh blocksci_btc`
 
 ## BlockSci export
 
 To parse the binary Bitcoin data from directly from Leveldb, use
 ```
-docker exec -ti blocksci blocksci_parser --output-directory BLOCKSCI_DATA_DIR update --max-block -6 disk --coin-directory BLOCKCHAIN_DATA_DIR
+docker exec -ti blocksci_btc blocksci_parser --output-directory BLOCKSCI_DATA_DIR update --max-block -6 disk --coin-directory BLOCKCHAIN_DATA_DIR
 ```
 
 To export BlockSci blockchain data to Apache Cassandra, create a keyspace

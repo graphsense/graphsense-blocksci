@@ -1,7 +1,7 @@
 
-DROP KEYSPACE IF EXISTS blocksci_test;
-CREATE KEYSPACE blocksci_test WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1 };
-USE blocksci_test;
+DROP KEYSPACE IF EXISTS graphsense;
+CREATE KEYSPACE graphsense WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1 };
+USE graphsense;
 
 CREATE TABLE exchange_rates (
     height int PRIMARY KEY,

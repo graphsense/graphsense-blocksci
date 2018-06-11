@@ -15,7 +15,7 @@ Start docker container
 ./docker/start.sh CONTAINER_NAME BLOCKCHAIN_DATA_DIR BLOCKCHAIN_DATA_DIR
 ```
 
-`CONTAINER_NAME` specifies the name of the docker container and
+`CONTAINER_NAME` specifies the name of the docker container;
 `BLOCKCHAIN_DATA_DIR` and `BLOCKSCI_DATA_DIR` are the locations of the
 data directories.
 

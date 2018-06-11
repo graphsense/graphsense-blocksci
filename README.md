@@ -12,8 +12,12 @@ or `./docker/build.sh`
 
 Start docker container
 ```
-./docker/start.sh
+./docker/start.sh CONTAINER_NAME BLOCKCHAIN_DATA_DIR BLOCKCHAIN_DATA_DIR
 ```
+
+`CONTAINER_NAME` specifies the name of the docker container and
+`BLOCKCHAIN_DATA_DIR` and `BLOCKSCI_DATA_DIR` are the locations of the
+data directories.
 
 Attach docker container
 ```
@@ -27,10 +31,6 @@ To parse the binary Bitcoin data from directly from Leveldb, use
 ```
 docker exec -ti blocksci blocksci_parser --output-directory BLOCKSCI_DATA_DIR update --max-block -6 disk --coin-directory BLOCKCHAIN_DATA_DIR
 ```
-
-where `BLOCKCHAIN_DATA_DIR` and `BLOCKSCI_DATA_DIR` needs to be specified.
-
-
 
 To export BlockSci blockchain data to Apache Cassandra, create a keyspace
 

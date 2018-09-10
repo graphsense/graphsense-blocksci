@@ -144,7 +144,7 @@ def insert(cluster, keyspace, cql_stmt, generator, batch_size):
     count = 0
     while values:
         batch_stmt.add_all([prepared_stmt]*batch_size, values)
-        session.execute_async(batch_stmt)
+        session.execute(batch_stmt)
 
         values = take(batch_size, generator)
         batch_stmt.clear()
@@ -175,9 +175,9 @@ def addr_str(addr_obj):
     if addr_obj.type == blocksci.address_type.multisig:
         res = [x.address_string for x in addr_obj.addresses]
     elif addr_obj.type == blocksci.address_type.nonstandard:
-        res = ['nonstandard']
+        res = None
     elif addr_obj.type == blocksci.address_type.nulldata:
-        res = ['nulldata']
+        res = None
     else:
         res = [addr_obj.address_string]
     return(res)

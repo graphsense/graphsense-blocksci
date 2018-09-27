@@ -250,8 +250,8 @@ def main():
     block_range = chain[args.start_index:args.end_index]
     num_blocks = len(block_range)
     block_index_range = (block_range[0].height, block_range[-1].height + 1)
-    tx_index_range = (block_range.txes.all[0].index,
-                      block_range.txes.all[-1].index + 1)
+    tx_index_range = (block_range[block_index_range[0]].txes.all[0].index,
+                      block_range[block_index_range[1] - 1].txes.all[-1].index + 1)
     num_tx = tx_index_range[1] - tx_index_range[0] + 1
 
     cluster = Cluster(args.cassandra.split(','))

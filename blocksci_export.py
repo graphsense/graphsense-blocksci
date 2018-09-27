@@ -56,7 +56,6 @@ class QueryManager(ABC):
         cls.session = cluster.connect()
         cls.session.default_timeout = 60
         cls.session.set_keyspace(keyspace)
-        cls.session.default_consistency_level = ConsistencyLevel.LOCAL_ONE
         cls.prepared_stmt = cls.session.prepare(cql_str)
 
     def close_pool(self):

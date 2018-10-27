@@ -72,7 +72,7 @@ RUN useradd -m -d /home/dockeruser -r -u 10000 dockeruser && \
     mv /opt/BlockSci/blockscipy /opt/ && \
     rm -rf /opt/BlockSci/* && \
     mv /opt/blockscipy /opt/BlockSci && \
-    rm -rf /opt/BlockSci/blockscipy/build /root/cache && \
+    rm -rf /opt/BlockSci/blockscipy/build /root/.cache && \
     apt-get autoremove -y --purge \
             autoconf \
             automake \

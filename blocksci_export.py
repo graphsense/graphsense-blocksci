@@ -42,6 +42,7 @@ class QueryManager(ABC):
 
     # chosen to match the default in execute_concurrent_with_args
     concurrency = 100
+    counter = Value('d', 0)
 
     def __init__(self, cluster, keyspace, chain, cql_str, process_count=1):
         self.process_count = process_count
@@ -56,7 +57,6 @@ class QueryManager(ABC):
         cls.session.default_timeout = 60
         cls.session.set_keyspace(keyspace)
         cls.prepared_stmt = cls.session.prepare(cql_str)
-        cls.counter = Value('d', 0)
 
     def close_pool(self):
         self.pool.close()
@@ -68,17 +68,19 @@ class QueryManager(ABC):
 
     @classmethod
     def insert(cls, params):
-        return
+        pass
 
 
 class TxQueryManager(QueryManager):
+
+    counter = Value('d', 0)
 
     @classmethod
     def insert(cls, params):
 
         idx_start, idx_end = params
 
-        batch_size = 1000
+        batch_size = 500
 
         count = 0
         last_index = idx_start
@@ -139,10 +141,11 @@ class TxQueryManager(QueryManager):
 
 class BlockTxQueryManager(QueryManager):
 
+    counter = Value('d', 0)
+
     @classmethod
     def insert(cls, params):
 
-        print('##### blocks {:,.0f}\n'.format(cls.counter.value), end='\r')
         idx_start, idx_end = params
 
         batch_size = 25
@@ -301,8 +304,8 @@ def main():
                         required=True,
                         help='BlockSci configuration file')
     parser.add_argument('-d', '--db_nodes', dest='db_nodes', nargs='+',
-                        default='localhost', metavar='CASSANDRA_NODES',
-                        help='List of cassandra nodes; default "localhost")')
+                        default='localhost', metavar='DB_NODE',
+                        help='List of Cassandra nodes; default "localhost")')
     parser.add_argument('-k', '--keyspace', dest='keyspace',
                         required=True,
                         help='Cassandra keyspace')
@@ -315,29 +318,26 @@ def main():
                              '(default 0)')
     parser.add_argument('-e', '--end_index', dest='end_index',
                         type=int, default=-1,
-                        help='only blocks with height smaller than this '
-                             'value are included; a negative index counts '
-                             'back from the end (default -1)')
+                        help='only blocks with height smaller than '
+                             'this value are included; a negative index '
+                             'counts back from the end (default -1)')
 
     args = parser.parse_args()
 
     chain = blocksci.Blockchain(args.blocksci_data)
-    start_index = args.start_index
-    if args.end_index > 0:
-        end_index = args.end_index + 1
-    else:
-        end_index = args.end_index
-    block_range = chain[start_index:end_index]
+    print("Number of parsed blocks: %d" % len(chain))
+    block_range = chain[args.start_index:args.end_index]
     num_blocks = len(block_range)
     block_index_range = (block_range[0].height, block_range[-1].height + 1)
-    tx_index_range = (block_range[block_index_range[0]].txes[0].index,
-                      block_range[block_index_range[1] - 1].txes[-1].index + 1)
+    tx_index_range = (block_range[0].txes[0].index,
+                      block_range[-1].txes[-1].index + 1)
     num_tx = tx_index_range[1] - tx_index_range[0] + 1
 
     cluster = Cluster(args.db_nodes)
 
     # transactions
     print('Transactions ({:,.0f} tx)'.format(num_tx))
+    print('tx index: {:,.0f} -- {:,.0f}'.format(*tx_index_range))
     cql_str = '''INSERT INTO transaction
                  (tx_prefix, tx_hash, tx_index, height, timestamp,
                   coinbase, total_input, total_output, inputs, outputs)
@@ -349,6 +349,7 @@ def main():
 
     # block transactions
     print('Block transactions ({:,.0f} blocks)'.format(num_blocks))
+    print('block index: {:,.0f} -- {:,.0f}'.format(*block_index_range))
     cql_str = '''INSERT INTO block_transactions (height, txs) VALUES (?, ?)'''
     qm = BlockTxQueryManager(cluster, args.keyspace, chain, cql_str,
                              args.num_proc)
@@ -356,7 +357,8 @@ def main():
     qm.close_pool()
 
     # blocks
-    print('Ingest {:,.0f} blocks'.format(num_blocks))
+    print('Blocks ({:,.0f} blocks)'.format(num_blocks))
+    print('block index: {:,.0f} -- {:,.0f}'.format(*block_index_range))
     cql_str = '''INSERT INTO block
                  (height, block_hash, timestamp, no_transactions)
                  VALUES (?, ?, ?, ?)'''

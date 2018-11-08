@@ -4,7 +4,6 @@
 ## BlockSci Docker container
 
 Build docker image
-
 ```
 docker build -t blocksci .
 ```
@@ -17,7 +16,9 @@ Start docker container
 
 `CONTAINER_NAME` specifies the name of the docker container;
 `BLOCKCHAIN_DATA_DIR` and `BLOCKSCI_DATA_DIR` are the locations of the
-data directories.
+data directories on the host system. `BLOCKCHAIN_DATA_DIR` is mapped to
+`/var/data/block_data`, and `BLOCKSCI_DATA_DIR` corresponds to
+`/var/data/blocksci_data` inside the docker container.
 
 Attach docker container
 ```
@@ -27,9 +28,14 @@ or `./docker/attach.sh blocksci_btc`
 
 ## BlockSci export
 
-To parse the binary Bitcoin data from directly from Leveldb, use
+Create a BlockSci config file, e.g., for Bitcoin using the disk mode parser
 ```
-docker exec -ti blocksci_btc blocksci_parser --output-directory BLOCKSCI_DATA_DIR update --max-block -6 disk --coin-directory BLOCKCHAIN_DATA_DIR
+blocksci_parser /var/data/blocksci_data/btc.cfg generate-config bitcoin /var/data/blocksci_data --max-block '-6' --disk /var/data/block_data
+```
+
+To run the BlockSci parser, use
+```
+blocksci_parser /var/data/blocksci_data/btc.cfg update
 ```
 
 To export BlockSci blockchain data to Apache Cassandra, create a keyspace
@@ -42,7 +48,8 @@ and use the `blocksci_export.py` script:
 
 ```
 blocksci_export.py -h
-usage: blocksci_export.py [-h] -b BLOCKSCI_DATA [-c CASSANDRA_HOSTS] -k
+usage: blocksci_export.py [-h] -c BLOCKSCI_DATA
+                          [-d CASSANDRA_NODE [CASSANDRA_NODE ...]] -k
                           KEYSPACE [-p NUM_PROC] [-s START_INDEX]
                           [-e END_INDEX]
 
@@ -50,11 +57,10 @@ Export dumped BlockSci data to Apache Cassandra
 
 optional arguments:
   -h, --help            show this help message and exit
-  -b BLOCKSCI_DATA, --blocksci_data BLOCKSCI_DATA
-                        directory containing the parsed BlockSci data
-  -c CASSANDRA_HOSTS, --cassandra CASSANDRA_HOSTS
-                        Cassandra nodes (comma separated list of nodes;
-                        default "localhost")
+  -c BLOCKSCI_DATA, --config BLOCKSCI_DATA
+                        BlockSci configuration file
+  -d DB_NODE [DB_NODE ...], --db_nodes DB_NODE [DB_NODE ...]
+                        List of Cassandra nodes; default "localhost")
   -k KEYSPACE, --keyspace KEYSPACE
                         Cassandra keyspace
   -p NUM_PROC, --processes NUM_PROC

@@ -32,6 +32,7 @@ RUN useradd -m -d /home/dockeruser -r -u 10000 dockeruser && \
             libboost-serialization1.62-dev \
             libboost-thread1.62.0 \
             libboost-thread1.62-dev \
+            liblz4-dev \
             libtool \
             libjsoncpp-dev \
             libjsonrpccpp-client0 \
@@ -47,7 +48,6 @@ RUN useradd -m -d /home/dockeruser -r -u 10000 dockeruser && \
             python3-pandas \
             python3-pip \
             python3-psutil \
-            python3-requests \
             python3-setuptools \
             python3-wheel \
             ipython3 \
@@ -57,6 +57,7 @@ RUN useradd -m -d /home/dockeruser -r -u 10000 dockeruser && \
     cd /opt && \
     git clone https://github.com/citp/BlockSci.git && \
     cd BlockSci && \
+    git checkout "v0.6" && \
     git submodule init && \
     git submodule update --recursive && \
     mkdir release && \
@@ -66,6 +67,7 @@ RUN useradd -m -d /home/dockeruser -r -u 10000 dockeruser && \
     make install && \
     cd /opt/BlockSci && \
     # python
+    pip3 install requests && \
     pip3 install -e blockscipy && \
     # clean up
     cd / && \
@@ -94,13 +96,11 @@ RUN useradd -m -d /home/dockeruser -r -u 10000 dockeruser && \
             libssl-dev \
             libsparsehash-dev \
             libtool && \
-    mkdir -p /var/data/blocksci_data/bitcoin && \
-    mkdir -p /var/data/blocksci_data/bitcoincash && \
-    mkdir -p /var/data/block_data/bitcoin && \
-    mkdir -p /var/data/block_data/bitcoincash && \
-    mkdir -p /var/data/block_data/litecoin && \
-    mkdir -p /var/data/block_data/zcash && \
+    mkdir -p /var/data/blocksci_data && \
+    mkdir -p /var/data/block_data && \
     chown -R dockeruser /var/data/
+
+COPY blocksci_export.py /usr/local/bin/blocksci_export.py
 
 USER dockeruser
 WORKDIR /home/dockeruser

@@ -300,7 +300,7 @@ def main():
     parser = ArgumentParser(description='Export dumped BlockSci data '
                                         'to Apache Cassandra',
                             epilog='GraphSense - http://graphsense.info')
-    parser.add_argument('-c', '--config', dest='blocksci_data',
+    parser.add_argument('-c', '--config', dest='blocksci_config',
                         required=True,
                         help='BlockSci configuration file')
     parser.add_argument('-d', '--db_nodes', dest='db_nodes', nargs='+',
@@ -324,7 +324,7 @@ def main():
 
     args = parser.parse_args()
 
-    chain = blocksci.Blockchain(args.blocksci_data)
+    chain = blocksci.Blockchain(args.blocksci_config)
     print("Number of parsed blocks: %d" % len(chain))
     block_range = chain[args.start_index:args.end_index]
     num_blocks = len(block_range)

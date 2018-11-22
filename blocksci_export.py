@@ -68,28 +68,50 @@ class QueryManager(ABC):
 
     @classmethod
     def insert(cls, params):
-        return
+        pass
 
 
 class TxQueryManager(QueryManager):
+
+    counter = Value('d', 0)
 
     @classmethod
     def insert(cls, params):
 
         idx_start, idx_end = params
 
-        batch_size = 1000
+        batch_size = 500
 
         count = 0
+        last_index = idx_start
         batch_stmt = BatchStatement()
+
         for index in range(idx_start, idx_end):
 
             tx = blocksci.Tx(index, cls.chain)
             batch_stmt.add(cls.prepared_stmt, tx_summary(tx))
+
             count += 1
 
             if (count % batch_size) == 0:
-                cls.session.execute(batch_stmt)
+                try:
+                    cls.session.execute(batch_stmt)
+                except Exception as e:
+                    # ingest single transactions if batch ingest fails
+                    # (batch too large error)
+                    print(batch_stmt)
+                    print(e)
+                    for elem in range(last_index, last_index + batch_size + 1):
+                        while True:
+                            try:
+                                tx = blocksci.Tx(elem, cls.chain)
+                                cls.session.execute(cls.prepared_stmt,
+                                                    tx_summary(tx))
+                            except Exception as e:
+                                print(e)
+                                continue
+                            break
+                last_index += batch_size
                 count = 0
                 batch_stmt.clear()
 
@@ -97,20 +119,41 @@ class TxQueryManager(QueryManager):
                 with cls.counter.get_lock():
                     cls.counter.value += batch_size
         else:
-            cls.session.execute(batch_stmt)
+            try:
+                cls.session.execute(batch_stmt)
+            except Exception as e:
+                # ingest single transactions if batch ingest fails
+                # (batch too large error)
+                print(batch_stmt)
+                print(e)
+                for elem in range(last_index, last_index + count + 1):
+                    while True:
+                        try:
+                            tx = blocksci.Tx(elem, cls.chain)
+                            cls.session.execute(cls.prepared_stmt,
+                                                tx_summary(tx))
+                        except Exception as e:
+                            print(e)
+                            continue
+                        break
+            print('#tx {:,.0f}'.format(cls.counter.value), end='\r')
 
 
 class BlockTxQueryManager(QueryManager):
+
+    counter = Value('d', 0)
 
     @classmethod
     def insert(cls, params):
 
         idx_start, idx_end = params
 
-        batch_size = 50
+        batch_size = 25
 
         count = 0
+        last_index = idx_start
         batch_stmt = BatchStatement()
+
         for index in range(idx_start, idx_end):
 
             block = cls.chain[index]
@@ -120,7 +163,26 @@ class BlockTxQueryManager(QueryManager):
             count += 1
 
             if (count % batch_size) == 0:
-                cls.session.execute(batch_stmt)
+                try:
+                    cls.session.execute(batch_stmt)
+                except Exception as e:
+                    # ingest single blocks batch ingest fails
+                    # (batch too large error)
+                    print(batch_stmt)
+                    print(e)
+                    for elem in range(last_index, last_index + batch_size + 1):
+                        while True:
+                            try:
+                                block = cls.chain[index]
+                                block_tx = [block.height,
+                                            [tx_stats(x) for x in block.txes]]
+                                cls.session.execute(cls.prepared_stmt,
+                                                    block_tx)
+                            except Exception as e:
+                                print(e)
+                                continue
+                            break
+                last_index += batch_size
                 count = 0
                 batch_stmt.clear()
 
@@ -128,7 +190,25 @@ class BlockTxQueryManager(QueryManager):
                 with cls.counter.get_lock():
                     cls.counter.value += batch_size
         else:
-            cls.session.execute(batch_stmt)
+            try:
+                cls.session.execute(batch_stmt)
+            except Exception as e:
+                # ingest single blocks if batch ingest fails
+                # (batch too large error)
+                print(batch_stmt)
+                print(e)
+                for elem in range(last_index, last_index + count + 1):
+                    while True:
+                        try:
+                            block = cls.chain[index]
+                            block_tx = [block.height,
+                                        [tx_stats(x) for x in block.txes]]
+                            cls.session.execute(cls.prepared_stmt, block_tx)
+                        except Exception as e:
+                            print(e)
+                            continue
+                        break
+            print('#blocks {:,.0f}'.format(cls.counter.value), end='\r')
 
 
 @timing
@@ -147,7 +227,7 @@ def insert(cluster, keyspace, cql_stmt, generator, batch_size):
 
         values = take(batch_size, generator)
         batch_stmt.clear()
-        if (count % 10000) == 0:
+        if (count % 1e3) == 0:
             print('#blocks {:,.0f}'.format(count), end='\r')
         count += batch_size
 
@@ -202,8 +282,8 @@ def tx_io_summary(x):
 
 
 def tx_summary(tx):
-    tx_inputs = [tx_io_summary(x) for x in tx.inputs.all]
-    tx_outputs = [tx_io_summary(x) for x in tx.outputs.all]
+    tx_inputs = [tx_io_summary(x) for x in tx.inputs]
+    tx_outputs = [tx_io_summary(x) for x in tx.outputs]
     return (str(tx.hash)[:5],
             bytearray.fromhex(str(tx.hash)),
             tx.index,
@@ -220,13 +300,12 @@ def main():
     parser = ArgumentParser(description='Export dumped BlockSci data '
                                         'to Apache Cassandra',
                             epilog='GraphSense - http://graphsense.info')
-    parser.add_argument('-b', '--blocksci_data', dest='blocksci_data',
+    parser.add_argument('-c', '--config', dest='blocksci_config',
                         required=True,
-                        help='directory containing parsed BlockSci data')
-    parser.add_argument('-c', '--cassandra', dest='cassandra',
-                        default='localhost', metavar='CASSANDRA_HOSTS',
-                        help='Cassandra nodes (comma separated list of nodes'
-                             '; default "localhost")')
+                        help='BlockSci configuration file')
+    parser.add_argument('-d', '--db_nodes', dest='db_nodes', nargs='+',
+                        default='localhost', metavar='DB_NODE',
+                        help='List of Cassandra nodes; default "localhost")')
     parser.add_argument('-k', '--keyspace', dest='keyspace',
                         required=True,
                         help='Cassandra keyspace')
@@ -239,32 +318,26 @@ def main():
                              '(default 0)')
     parser.add_argument('-e', '--end_index', dest='end_index',
                         type=int, default=-1,
-                        help='only blocks with height smaller than this '
-                             'value are included; a negative index counts '
-                             'back from the end (default -1)')
+                        help='only blocks with height smaller than '
+                             'this value are included; a negative index '
+                             'counts back from the end (default -1)')
 
     args = parser.parse_args()
 
-    chain = blocksci.Blockchain(args.blocksci_data)
+    chain = blocksci.Blockchain(args.blocksci_config)
+    print("Number of parsed blocks: %d" % len(chain))
     block_range = chain[args.start_index:args.end_index]
     num_blocks = len(block_range)
     block_index_range = (block_range[0].height, block_range[-1].height + 1)
-    tx_index_range = (block_range[block_index_range[0]].txes.all[0].index,
-                      block_range[block_index_range[1] - 1].txes.all[-1].index + 1)
+    tx_index_range = (block_range[0].txes[0].index,
+                      block_range[-1].txes[-1].index + 1)
     num_tx = tx_index_range[1] - tx_index_range[0] + 1
 
-    cluster = Cluster(args.cassandra.split(','))
-
-    # block transactions
-    print('Block transactions ({:,.0f} blocks)'.format(num_blocks))
-    cql_str = '''INSERT INTO block_transactions (height, txs) VALUES (?, ?)'''
-    qm = BlockTxQueryManager(cluster, args.keyspace, chain, cql_str,
-                             args.num_proc)
-    qm.execute(BlockTxQueryManager.insert, block_index_range)
-    qm.close_pool()
+    cluster = Cluster(args.db_nodes)
 
     # transactions
     print('Transactions ({:,.0f} tx)'.format(num_tx))
+    print('tx index: {:,.0f} -- {:,.0f}'.format(*tx_index_range))
     cql_str = '''INSERT INTO transaction
                  (tx_prefix, tx_hash, tx_index, height, timestamp,
                   coinbase, total_input, total_output, inputs, outputs)
@@ -274,8 +347,18 @@ def main():
     qm.execute(TxQueryManager.insert, tx_index_range)
     qm.close_pool()
 
+    # block transactions
+    print('Block transactions ({:,.0f} blocks)'.format(num_blocks))
+    print('block index: {:,.0f} -- {:,.0f}'.format(*block_index_range))
+    cql_str = '''INSERT INTO block_transactions (height, txs) VALUES (?, ?)'''
+    qm = BlockTxQueryManager(cluster, args.keyspace, chain, cql_str,
+                             args.num_proc)
+    qm.execute(BlockTxQueryManager.insert, block_index_range)
+    qm.close_pool()
+
     # blocks
-    print('Ingest {:,.0f} blocks'.format(num_blocks))
+    print('Blocks ({:,.0f} blocks)'.format(num_blocks))
+    print('block index: {:,.0f} -- {:,.0f}'.format(*block_index_range))
     cql_str = '''INSERT INTO block
                  (height, block_hash, timestamp, no_transactions)
                  VALUES (?, ?, ?, ?)'''

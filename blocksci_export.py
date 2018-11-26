@@ -1,6 +1,6 @@
 from abc import ABC
 from argparse import ArgumentParser
-from datetime import date
+from datetime import date, datetime
 from functools import wraps
 from itertools import islice
 from multiprocessing import Pool, Value
@@ -10,6 +10,7 @@ import blocksci
 from cassandra import ConsistencyLevel
 from cassandra.cluster import Cluster
 from cassandra.query import BatchStatement
+import numpy as np
 
 
 # dict(zip(blocksci.address_type.types,
@@ -321,12 +322,41 @@ def main():
                         help='only blocks with height smaller than '
                              'this value are included; a negative index '
                              'counts back from the end (default -1)')
+    parser.add_argument('-f', '--force', dest='force', action='store_true',
+                        help='exchange rates are only available up to the '
+                             'previous day. Without this option newer blocks '
+                             'are automatically discarded.')
 
     args = parser.parse_args()
 
     chain = blocksci.Blockchain(args.blocksci_config)
-    print("Number of parsed blocks: %d" % len(chain))
+    print('Number of parsed blocks: %d (%s)' %
+          (len(chain), datetime.strftime(chain[-1].time, "%F %T")))
     block_range = chain[args.start_index:args.end_index]
+
+    if args.start_index >= len(chain):
+        print("Error: -s/--start_index argument must be smaller than %d" %
+              len(chain))
+        raise SystemExit
+
+    if not args.force:
+        tstamp_today = time.mktime(datetime.today().date().timetuple())
+        block_tstamps = block_range.time.astype(datetime)/1e9
+        v = np.where(block_tstamps < tstamp_today)[0]
+        if len(v):
+            last_index = np.max(v)
+            last_height = block_range[last_index].height
+            if last_height + 1 != chain[args.end_index].height:
+                print("Discarding blocks with missing exchange rates: "
+                      "%d ... %d" %
+                      (last_height + 1, chain[args.end_index].height))
+                print("(use --force to enforce the export of this blocks)")
+                block_range = chain[args.start_index:(last_height + 1)]
+        else:
+            print("No exchange rates available for the specified blocks "
+                  "(use --force to enforce the export)")
+            raise SystemExit
+
     num_blocks = len(block_range)
     block_index_range = (block_range[0].height, block_range[-1].height + 1)
     tx_index_range = (block_range[0].txes[0].index,

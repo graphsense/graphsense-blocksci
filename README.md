@@ -51,13 +51,13 @@ blocksci_export.py -h
 usage: blocksci_export.py [-h] -c BLOCKSCI_DATA
                           [-d CASSANDRA_NODE [CASSANDRA_NODE ...]] -k
                           KEYSPACE [-p NUM_PROC] [-s START_INDEX]
-                          [-e END_INDEX]
+                          [-e END_INDEX] [-f]
 
 Export dumped BlockSci data to Apache Cassandra
 
 optional arguments:
   -h, --help            show this help message and exit
-  -c BLOCKSCI_DATA, --config BLOCKSCI_DATA
+  -c BLOCKSCI_CONFIG, --config BLOCKSCI_CONFIG
                         BlockSci configuration file
   -d DB_NODE [DB_NODE ...], --db_nodes DB_NODE [DB_NODE ...]
                         List of Cassandra nodes; default "localhost")
@@ -71,6 +71,9 @@ optional arguments:
                         only blocks with height smaller than this value are
                         included; a negative index counts back from the end
                         (default -1)
+  -f, --force           exchange rates are only available up to the previous
+                        day. Without this option newer blocks are
+                        automatically discarded.
 
 GraphSense - http://graphsense.info
 ```

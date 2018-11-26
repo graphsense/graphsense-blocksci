@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from abc import ABC
 from argparse import ArgumentParser
 from datetime import date, datetime

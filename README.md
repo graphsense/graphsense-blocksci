@@ -1,5 +1,30 @@
 
-# Export of BlockSci data to Apache Cassandra 
+# A dockerized component to synchronize BlockSci data to Apache Cassandra 
+
+## Prerequisites
+
+### Apache Cassandra
+
+Download and install [Apache Cassandra][apache-cassandra] >= 3.11
+in `$CASSANDRA_HOME`.
+
+Start Cassandra (in the foreground for development purposes):
+
+    $CASSANDRA_HOME/bin/cassandra -f
+
+Connect to Cassandra via CQL
+
+    $CASSANDRA_HOME/bin/cqlsh
+
+and test if it is running
+
+    cqlsh> SELECT cluster_name, listen_address FROM system.local;
+
+    cluster_name | listen_address
+    --------------+----------------
+    Test Cluster |      127.0.0.1
+
+    (1 rows)
 
 ## BlockSci Docker container
 
@@ -81,3 +106,6 @@ optional arguments:
 
 GraphSense - http://graphsense.info
 ```
+
+
+[apache-cassandra]: http://cassandra.apache.org/download/

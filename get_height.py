@@ -24,9 +24,18 @@ def main():
     cql_str = '''SELECT height FROM block'''
     res = session.execute(cql_str)
     max_val = 0
-    for row in res:
+    for i, row in enumerate(res):
         max_val = max(max_val, row[0])
-    print(max_val)
+    print("Max height in blocks table: %d" % max_val)
+    print("#blocks in blocks table: %d" % (i + 1))
+
+    cql_str = '''SELECT height FROM exchange_rates'''
+    res = session.execute(cql_str)
+    max_val = 0
+    for i, row in enumerate(res):
+        max_val = max(max_val, row[0])
+    print("Max height in exchange_rates table: %d" % max_val)
+    print("#blocks in exchange_rates table: %d" % (i + 1))
     cluster.shutdown()
 
 

@@ -1,10 +1,10 @@
-FROM debian:buster-slim
+FROM ubuntu:18.04
 LABEL maintainer="rainer.stuetz@ait.ac.at"
 
-RUN useradd -m -d /home/dockeruser -r -u 1008 dockeruser && \
+RUN useradd -m -d /home/dockeruser -r -u 10000 dockeruser && \
     apt-get update && \
     # install packages
-    apt-get install -y --no-install-recommends \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             autoconf \
             automake \
             build-essential \
@@ -32,6 +32,7 @@ RUN useradd -m -d /home/dockeruser -r -u 1008 dockeruser && \
             libboost-serialization1.62-dev \
             libboost-thread1.62.0 \
             libboost-thread1.62-dev \
+            liblz4-dev \
             libtool \
             libjsoncpp-dev \
             libjsonrpccpp-client0 \
@@ -47,7 +48,6 @@ RUN useradd -m -d /home/dockeruser -r -u 1008 dockeruser && \
             python3-pandas \
             python3-pip \
             python3-psutil \
-            python3-requests \
             python3-setuptools \
             python3-wheel \
             ipython3 \
@@ -57,6 +57,7 @@ RUN useradd -m -d /home/dockeruser -r -u 1008 dockeruser && \
     cd /opt && \
     git clone https://github.com/citp/BlockSci.git && \
     cd BlockSci && \
+    git checkout "v0.6" && \
     git submodule init && \
     git submodule update --recursive && \
     mkdir release && \
@@ -66,13 +67,14 @@ RUN useradd -m -d /home/dockeruser -r -u 1008 dockeruser && \
     make install && \
     cd /opt/BlockSci && \
     # python
+    pip3 install requests && \
     pip3 install -e blockscipy && \
     # clean up
     cd / && \
     mv /opt/BlockSci/blockscipy /opt/ && \
     rm -rf /opt/BlockSci/* && \
     mv /opt/blockscipy /opt/BlockSci && \
-    rm -rf /opt/BlockSci/blockscipy/build /root/cache && \
+    rm -rf /opt/BlockSci/blockscipy/build /root/.cache && \
     apt-get autoremove -y --purge \
             autoconf \
             automake \
@@ -95,7 +97,10 @@ RUN useradd -m -d /home/dockeruser -r -u 1008 dockeruser && \
             libsparsehash-dev \
             libtool && \
     mkdir -p /var/data/blocksci_data && \
-    mkdir -p /var/data/block_data
+    mkdir -p /var/data/block_data && \
+    chown -R dockeruser /var/data/
+
+COPY blocksci_export.py /usr/local/bin/blocksci_export.py
 
 USER dockeruser
 WORKDIR /home/dockeruser

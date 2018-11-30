@@ -48,10 +48,10 @@ and use the `blocksci_export.py` script:
 
 ```
 blocksci_export.py -h
-usage: blocksci_export.py [-h] -c BLOCKSCI_DATA
-                          [-d CASSANDRA_NODE [CASSANDRA_NODE ...]] -k
-                          KEYSPACE [-p NUM_PROC] [-s START_INDEX]
-                          [-e END_INDEX] [-f]
+usage: blocksci_export.py [-h] -c BLOCKSCI_CONFIG [-d DB_NODE [DB_NODE ...]]
+                          -k KEYSPACE [-p NUM_PROC] [-f]
+                          [--start_index START_INDEX] [--end_index END_INDEX]
+                          [--exchange_rates] [--blocks] [--block_tx] [--tx]
 
 Export dumped BlockSci data to Apache Cassandra
 
@@ -65,15 +65,19 @@ optional arguments:
                         Cassandra keyspace
   -p NUM_PROC, --processes NUM_PROC
                         number of processes (default 1)
-  -s START_INDEX, --start_index START_INDEX
-                        start index of the blocks to export (default 0)
-  -e END_INDEX, --end_index END_INDEX
-                        only blocks with height smaller than this value are
-                        included; a negative index counts back from the end
-                        (default -1)
   -f, --force           exchange rates are only available up to the previous
                         day. Without this option newer blocks are
                         automatically discarded.
+  --start_index START_INDEX
+                        start index of the blocks to export (default 0)
+  --end_index END_INDEX
+                        only blocks with height smaller than this value are
+                        included; a negative index counts back from the end
+                        (default -1)
+  --exchange_rates      fetch and ingest only the exchange rates
+  --blocks              ingest only into the blocks table
+  --block_tx            ingest only into the block_transactions table
+  --tx                  ingest only into the transactions table
 
 GraphSense - http://graphsense.info
 ```

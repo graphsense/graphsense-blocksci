@@ -308,7 +308,7 @@ def main():
                         help='BlockSci configuration file')
     parser.add_argument('-d', '--db_nodes', dest='db_nodes', nargs='+',
                         default='localhost', metavar='DB_NODE',
-                        help='List of Cassandra nodes; default "localhost")')
+                        help='list of Cassandra nodes; default "localhost")')
     parser.add_argument('-k', '--keyspace', dest='keyspace',
                         required=True,
                         help='Cassandra keyspace')
@@ -360,7 +360,7 @@ def main():
                 print("Discarding blocks with missing exchange rates: "
                       "%d ... %d" %
                       (last_height + 1, chain[args.end_index].height))
-                print("(use --force to enforce the export of this blocks)")
+                print("(use --force to enforce the export of these blocks)")
                 block_range = chain[args.start_index:(last_height + 1)]
         else:
             print("No exchange rates available for the specified blocks "

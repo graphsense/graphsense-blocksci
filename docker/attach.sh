@@ -1,6 +1,6 @@
 #!/bin/sh
 
-if [ $# -ne 3 ]; then
+if [ $# -ne 1 ]; then
     echo "Usage: $0 CONTAINER_NAME"
     exit 1
 fi

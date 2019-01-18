@@ -296,7 +296,8 @@ def tx_summary(tx):
             tx.input_value,
             tx.output_value,
             list(tx_inputs),
-            list(tx_outputs))
+            list(tx_outputs),
+            blocksci.heuristics.is_coinjoin(tx))
 
 
 def main():
@@ -384,9 +385,10 @@ def main():
         print('Transactions ({:,.0f} tx)'.format(num_tx))
         print('tx index: {:,.0f} -- {:,.0f}'.format(*tx_index_range))
         cql_str = '''INSERT INTO transaction
-                     (tx_prefix, tx_hash, tx_index, height, timestamp,
-                      coinbase, total_input, total_output, inputs, outputs)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
+                     (tx_prefix, tx_hash, tx_index, height,
+                     timestamp, coinbase, total_input, total_output,
+                     inputs, outputs, coinjoin)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
         qm = TxQueryManager(cluster, args.keyspace, chain, cql_str,
                             args.num_proc)
         qm.execute(TxQueryManager.insert, tx_index_range)

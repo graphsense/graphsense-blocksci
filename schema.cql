@@ -27,6 +27,7 @@ CREATE TABLE transaction (
     total_output bigint,
     inputs list<FROZEN<tx_input_output>>,
     outputs list<FROZEN<tx_input_output>>,
+    coinjoin boolean,
     PRIMARY KEY (tx_prefix, tx_hash)
 );
 

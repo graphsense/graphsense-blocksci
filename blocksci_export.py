@@ -372,8 +372,8 @@ def main():
         cc_eur = blocksci.currency.CurrencyConverter(currency='EUR')
         cc_usd = blocksci.currency.CurrencyConverter(currency='USD')
         generator = ((elem.height,
-                      cc_usd.exchangerate(date.fromtimestamp(elem.timestamp)),
-                      cc_eur.exchangerate(date.fromtimestamp(elem.timestamp)))
+                      cc_eur.exchangerate(date.fromtimestamp(elem.timestamp)),
+                      cc_usd.exchangerate(date.fromtimestamp(elem.timestamp)))
                      for elem in block_range
                      if date.fromtimestamp(elem.timestamp) < date.today())
         insert(cluster, args.keyspace, cql_str, generator, 1000)

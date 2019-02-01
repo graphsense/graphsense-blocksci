@@ -33,10 +33,10 @@ address_type = {
 def timing(f):
     @wraps(f)
     def wrap(*args, **kw):
-        t1 = time.time()
+        t1 = datetime.now()
         result = f(*args, **kw)
-        t2 = time.time()
-        print('\n... %.1f sec\n' % (t2 - t1))
+        t2 = datetime.now()
+        print('\n... %s\n' % str(t2 - t1))
         return result
     return wrap
 
@@ -84,44 +84,15 @@ class TxQueryManager(QueryManager):
         idx_start, idx_end = params
 
         batch_size = 500
-
-        count = 0
-        last_index = idx_start
         batch_stmt = BatchStatement()
 
-        for index in range(idx_start, idx_end):
+        for index in range(idx_start, idx_end, batch_size):
 
-            tx = blocksci.Tx(index, cls.chain)
-            batch_stmt.add(cls.prepared_stmt, tx_summary(tx))
+            curr_batch_size = min(batch_size, idx_end - index)
+            for i in range(0, curr_batch_size):
+                tx = blocksci.Tx(index + i, cls.chain)
+                batch_stmt.add(cls.prepared_stmt, tx_summary(tx))
 
-            count += 1
-
-            if (count % batch_size) == 0:
-                try:
-                    cls.session.execute(batch_stmt)
-                except Exception as e:
-                    # ingest single transactions if batch ingest fails
-                    # (batch too large error)
-                    print(batch_stmt)
-                    print(e)
-                    for elem in range(last_index, last_index + batch_size + 1):
-                        while True:
-                            try:
-                                tx = blocksci.Tx(elem, cls.chain)
-                                cls.session.execute(cls.prepared_stmt,
-                                                    tx_summary(tx))
-                            except Exception as e:
-                                print(e)
-                                continue
-                            break
-                last_index += batch_size
-                count = 0
-                batch_stmt.clear()
-
-                print('#tx {:,.0f}'.format(cls.counter.value), end='\r')
-                with cls.counter.get_lock():
-                    cls.counter.value += batch_size
-        else:
             try:
                 cls.session.execute(batch_stmt)
             except Exception as e:
@@ -129,16 +100,20 @@ class TxQueryManager(QueryManager):
                 # (batch too large error)
                 print(batch_stmt)
                 print(e)
-                for elem in range(last_index, last_index + count + 1):
+                for i in range(0, curr_batch_size):
                     while True:
                         try:
-                            tx = blocksci.Tx(elem, cls.chain)
+                            tx = blocksci.Tx(index + i, cls.chain)
                             cls.session.execute(cls.prepared_stmt,
                                                 tx_summary(tx))
                         except Exception as e:
                             print(e)
                             continue
                         break
+            batch_stmt.clear()
+
+            with cls.counter.get_lock():
+                cls.counter.value += curr_batch_size
             print('#tx {:,.0f}'.format(cls.counter.value), end='\r')
 
 
@@ -152,65 +127,39 @@ class BlockTxQueryManager(QueryManager):
         idx_start, idx_end = params
 
         batch_size = 25
-
-        count = 0
-        last_index = idx_start
         batch_stmt = BatchStatement()
 
-        for index in range(idx_start, idx_end):
+        for index in range(idx_start, idx_end, batch_size):
 
-            block = cls.chain[index]
-            block_tx = [block.height, [tx_stats(x) for x in block.txes]]
-            batch_stmt.add(cls.prepared_stmt, block_tx)
+            curr_batch_size = min(batch_size, idx_end - index)
+            for i in range(0, curr_batch_size):
+                block = cls.chain[index + i]
+                block_tx = [block.height, [tx_stats(x) for x in block.txes]]
+                batch_stmt.add(cls.prepared_stmt, block_tx)
 
-            count += 1
-
-            if (count % batch_size) == 0:
-                try:
-                    cls.session.execute(batch_stmt)
-                except Exception as e:
-                    # ingest single blocks batch ingest fails
-                    # (batch too large error)
-                    print(batch_stmt)
-                    print(e)
-                    for elem in range(last_index, last_index + batch_size + 1):
-                        while True:
-                            try:
-                                block = cls.chain[index]
-                                block_tx = [block.height,
-                                            [tx_stats(x) for x in block.txes]]
-                                cls.session.execute(cls.prepared_stmt,
-                                                    block_tx)
-                            except Exception as e:
-                                print(e)
-                                continue
-                            break
-                last_index += batch_size
-                count = 0
-                batch_stmt.clear()
-
-                print('#blocks {:,.0f}'.format(cls.counter.value), end='\r')
-                with cls.counter.get_lock():
-                    cls.counter.value += batch_size
-        else:
             try:
                 cls.session.execute(batch_stmt)
             except Exception as e:
-                # ingest single blocks if batch ingest fails
+                # ingest single blocks batch ingest fails
                 # (batch too large error)
                 print(batch_stmt)
                 print(e)
-                for elem in range(last_index, last_index + count + 1):
+                for i in range(0, curr_batch_size):
                     while True:
                         try:
-                            block = cls.chain[index]
+                            block = cls.chain[index + i]
                             block_tx = [block.height,
                                         [tx_stats(x) for x in block.txes]]
-                            cls.session.execute(cls.prepared_stmt, block_tx)
+                            cls.session.execute(cls.prepared_stmt,
+                                                block_tx)
                         except Exception as e:
                             print(e)
                             continue
                         break
+            batch_stmt.clear()
+
+            with cls.counter.get_lock():
+                cls.counter.value += curr_batch_size
             print('#blocks {:,.0f}'.format(cls.counter.value), end='\r')
 
 
@@ -296,7 +245,8 @@ def tx_summary(tx):
             tx.input_value,
             tx.output_value,
             list(tx_inputs),
-            list(tx_outputs))
+            list(tx_outputs),
+            blocksci.heuristics.is_coinjoin(tx))
 
 
 def main():
@@ -384,9 +334,10 @@ def main():
         print('Transactions ({:,.0f} tx)'.format(num_tx))
         print('tx index: {:,.0f} -- {:,.0f}'.format(*tx_index_range))
         cql_str = '''INSERT INTO transaction
-                     (tx_prefix, tx_hash, tx_index, height, timestamp,
-                      coinbase, total_input, total_output, inputs, outputs)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
+                     (tx_prefix, tx_hash, tx_index, height,
+                      timestamp, coinbase, total_input, total_output,
+                      inputs, outputs, coinjoin)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
         qm = TxQueryManager(cluster, args.keyspace, chain, cql_str,
                             args.num_proc)
         qm.execute(TxQueryManager.insert, tx_index_range)
@@ -421,8 +372,8 @@ def main():
         cc_eur = blocksci.currency.CurrencyConverter(currency='EUR')
         cc_usd = blocksci.currency.CurrencyConverter(currency='USD')
         generator = ((elem.height,
-                      cc_usd.exchangerate(date.fromtimestamp(elem.timestamp)),
-                      cc_eur.exchangerate(date.fromtimestamp(elem.timestamp)))
+                      cc_eur.exchangerate(date.fromtimestamp(elem.timestamp)),
+                      cc_usd.exchangerate(date.fromtimestamp(elem.timestamp)))
                      for elem in block_range
                      if date.fromtimestamp(elem.timestamp) < date.today())
         insert(cluster, args.keyspace, cql_str, generator, 1000)

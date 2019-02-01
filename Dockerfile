@@ -43,7 +43,6 @@ RUN useradd -m -d /home/dockeruser -r -u 10000 dockeruser && \
             libsparsehash-dev \
             libssl-dev \
             python3.6 \
-            python3-cassandra \
             python3-crypto \
             python3-pandas \
             python3-pip \
@@ -68,6 +67,7 @@ RUN useradd -m -d /home/dockeruser -r -u 10000 dockeruser && \
     cd /opt/BlockSci && \
     # python
     pip3 install requests && \
+    pip3 install cassandra-driver==3.16.0 && \
     pip3 install -e blockscipy && \
     # clean up
     cd / && \

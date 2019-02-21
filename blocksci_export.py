@@ -187,12 +187,36 @@ def insert(cluster, keyspace, cql_stmt, generator, batch_size):
 
 
 def take(n, iterable):
-    '''Return first n items of the iterable as a list'''
+    '''Return first n items of the iterable as a list
+
+    >>> take(0, [1, 2])
+    []
+
+    >>> take(1, [1, 2])
+    [1]
+
+    >>> take(2, [1, 2])
+    [1, 2]
+
+    >>> take(3, [1, 2])
+    [1, 2]
+    '''
+
     return list(islice(iterable, n))
 
 
 def chunk(val_range, k):
-    '''Split the number range val_range=[n1, n2] into k evenly sized chunks'''
+    '''Split the number range val_range=[n1, n2] into k evenly sized chunks
+
+    >>> chunk([0, 1], 1)
+    [(0, 1)]
+
+    >>> chunk([0, 4], 4)
+    [(0, 1), (1, 2), (2, 3), (3, 4)]
+
+    >>> chunk([0, 5], 4)
+    [(0, 2), (2, 3), (3, 4), (4, 5)]
+    '''
 
     n1, n2 = val_range
     assert n2 > n1

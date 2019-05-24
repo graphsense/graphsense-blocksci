@@ -5,6 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Changed
+- Multi-stage Dockerfile to reduce image size
 ### Added
 - Added --chunks argparse argument
 - Added doctests

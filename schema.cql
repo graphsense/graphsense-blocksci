@@ -1,5 +1,5 @@
 DROP KEYSPACE IF EXISTS graphsense;
-CREATE KEYSPACE graphsense WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1 };
+CREATE KEYSPACE graphsense WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
 
 USE graphsense;
 
@@ -48,16 +48,4 @@ CREATE TABLE exchange_rates (
     height int PRIMARY KEY,
     eur    double,
     usd    double
-);
-
-CREATE TABLE tag (
-    address text,
-    tag text,
-    tag_uri text,
-    description text,
-    actor_category text,
-    source text,
-    source_uri text,
-    timestamp int,
-    PRIMARY KEY (address, tag, source)
 );

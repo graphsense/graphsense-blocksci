@@ -8,25 +8,26 @@ from itertools import islice
 from multiprocessing import Pool, Value
 import time
 
-import blocksci
+
 from cassandra import ConsistencyLevel
 from cassandra.cluster import Cluster
 from cassandra.query import BatchStatement
 import numpy as np
+import blocksci
 
 
 # dict(zip(blocksci.address_type.types,
 #      range(1, len(blocksci.address_type.types) + 1)))
 address_type = {
-  'address_type.nonstandard': 1,
-  'address_type.pubkey': 2,
-  'address_type.pubkeyhash': 3,
-  'address_type.multisig_pubkey': 4,
-  'address_type.scripthash': 5,
-  'address_type.multisig': 6,
-  'address_type.nulldata': 7,
-  'address_type.witness_pubkeyhash': 8,
-  'address_type.witness_scripthash': 9
+    'address_type.nonstandard': 1,
+    'address_type.pubkey': 2,
+    'address_type.pubkeyhash': 3,
+    'address_type.multisig_pubkey': 4,
+    'address_type.scripthash': 5,
+    'address_type.multisig': 6,
+    'address_type.nulldata': 7,
+    'address_type.witness_pubkeyhash': 8,
+    'address_type.witness_scripthash': 9
 }
 
 
@@ -237,7 +238,7 @@ def addr_str(addr_obj):
         res = None
     else:
         res = [addr_obj.address_string]
-    return(res)
+    return res
 
 
 def block_summary(block):

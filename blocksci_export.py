@@ -8,25 +8,26 @@ from itertools import islice
 from multiprocessing import Pool, Value
 import time
 
-import blocksci
+
 from cassandra import ConsistencyLevel
 from cassandra.cluster import Cluster
 from cassandra.query import BatchStatement
 import numpy as np
+import blocksci
 
 
 # dict(zip(blocksci.address_type.types,
 #      range(1, len(blocksci.address_type.types) + 1)))
 address_type = {
-  'address_type.nonstandard': 1,
-  'address_type.pubkey': 2,
-  'address_type.pubkeyhash': 3,
-  'address_type.multisig_pubkey': 4,
-  'address_type.scripthash': 5,
-  'address_type.multisig': 6,
-  'address_type.nulldata': 7,
-  'address_type.witness_pubkeyhash': 8,
-  'address_type.witness_scripthash': 9
+    'address_type.nonstandard': 1,
+    'address_type.pubkey': 2,
+    'address_type.pubkeyhash': 3,
+    'address_type.multisig_pubkey': 4,
+    'address_type.scripthash': 5,
+    'address_type.multisig': 6,
+    'address_type.nulldata': 7,
+    'address_type.witness_pubkeyhash': 8,
+    'address_type.witness_scripthash': 9
 }
 
 
@@ -47,9 +48,13 @@ class QueryManager(ABC):
     concurrency = 100
     counter = Value('d', 0)
 
-    def __init__(self, cluster, keyspace, chain, cql_str, process_count=1):
-        self.process_count = process_count
-        self.pool = Pool(processes=process_count,
+    def __init__(self, cluster, keyspace, chain, cql_str,
+                 num_proc=1, num_chunks=None):
+        if not num_chunks:
+            num_chunks = num_proc
+        self.num_proc = num_proc
+        self.num_chunks = num_chunks
+        self.pool = Pool(processes=num_proc,
                          initializer=self._setup,
                          initargs=(cluster, chain, keyspace, cql_str))
 
@@ -67,7 +72,7 @@ class QueryManager(ABC):
 
     @timing
     def execute(self, fun, params):
-        self.pool.map(fun, chunk(params, self.process_count))
+        self.pool.map(fun, chunk(params, self.num_chunks))
 
     @classmethod
     def insert(cls, params):
@@ -98,7 +103,6 @@ class TxQueryManager(QueryManager):
             except Exception as e:
                 # ingest single transactions if batch ingest fails
                 # (batch too large error)
-                print(batch_stmt)
                 print(e)
                 for i in range(0, curr_batch_size):
                     while True:
@@ -142,7 +146,6 @@ class BlockTxQueryManager(QueryManager):
             except Exception as e:
                 # ingest single blocks batch ingest fails
                 # (batch too large error)
-                print(batch_stmt)
                 print(e)
                 for i in range(0, curr_batch_size):
                     while True:
@@ -185,12 +188,36 @@ def insert(cluster, keyspace, cql_stmt, generator, batch_size):
 
 
 def take(n, iterable):
-    '''Return first n items of the iterable as a list'''
+    '''Return first n items of the iterable as a list
+
+    >>> take(0, [1, 2])
+    []
+
+    >>> take(1, [1, 2])
+    [1]
+
+    >>> take(2, [1, 2])
+    [1, 2]
+
+    >>> take(3, [1, 2])
+    [1, 2]
+    '''
+
     return list(islice(iterable, n))
 
 
 def chunk(val_range, k):
-    '''Split the number range val_range=[n1, n2] into k evenly sized chunks'''
+    '''Split the number range val_range=[n1, n2] into k evenly sized chunks
+
+    >>> chunk([0, 1], 1)
+    [(0, 1)]
+
+    >>> chunk([0, 4], 4)
+    [(0, 1), (1, 2), (2, 3), (3, 4)]
+
+    >>> chunk([0, 5], 4)
+    [(0, 2), (2, 3), (3, 4), (4, 5)]
+    '''
 
     n1, n2 = val_range
     assert n2 > n1
@@ -211,7 +238,7 @@ def addr_str(addr_obj):
         res = None
     else:
         res = [addr_obj.address_string]
-    return(res)
+    return res
 
 
 def block_summary(block):
@@ -262,9 +289,13 @@ def main():
     parser.add_argument('-k', '--keyspace', dest='keyspace',
                         required=True,
                         help='Cassandra keyspace')
-    parser.add_argument('-p', '--processes', dest='num_proc',
+    parser.add_argument('--processes', dest='num_proc',
                         type=int, default=1,
                         help='number of processes (default 1)')
+    parser.add_argument('--chunks', dest='num_chunks',
+                        type=int,
+                        help='number of chunks to split tx/block range '
+                             '(default `NUM_PROC`)')
     parser.add_argument('-f', '--force', dest='force', action='store_true',
                         help='exchange rates are only available up to the '
                              'previous day. Without this option newer blocks '
@@ -298,6 +329,9 @@ def main():
         print("Error: --start_index argument must be smaller than %d" %
               len(chain))
         raise SystemExit
+
+    if not args.num_chunks:
+        args.num_chunks = args.num_proc
 
     if not args.force:
         tstamp_today = time.mktime(datetime.today().date().timetuple())
@@ -339,7 +373,7 @@ def main():
                       inputs, outputs, coinjoin)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
         qm = TxQueryManager(cluster, args.keyspace, chain, cql_str,
-                            args.num_proc)
+                            args.num_proc, args.num_chunks)
         qm.execute(TxQueryManager.insert, tx_index_range)
         qm.close_pool()
 
@@ -350,7 +384,7 @@ def main():
         cql_str = '''INSERT INTO block_transactions
                      (height, txs) VALUES (?, ?)'''
         qm = BlockTxQueryManager(cluster, args.keyspace, chain, cql_str,
-                                 args.num_proc)
+                                 args.num_proc, args.num_chunks)
         qm.execute(BlockTxQueryManager.insert, block_index_range)
         qm.close_pool()
 

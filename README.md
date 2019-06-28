@@ -74,7 +74,8 @@ and use the `blocksci_export.py` script:
 ```
 blocksci_export.py -h
 usage: blocksci_export.py [-h] -c BLOCKSCI_CONFIG [-d DB_NODE [DB_NODE ...]]
-                          -k KEYSPACE [-p NUM_PROC] [-f]
+                          -k KEYSPACE [--processes NUM_PROC]
+                          [--chunks NUM_CHUNKS] [-f]
                           [--start_index START_INDEX] [--end_index END_INDEX]
                           [--exchange_rates] [--blocks] [--block_tx] [--tx]
 
@@ -85,11 +86,12 @@ optional arguments:
   -c BLOCKSCI_CONFIG, --config BLOCKSCI_CONFIG
                         BlockSci configuration file
   -d DB_NODE [DB_NODE ...], --db_nodes DB_NODE [DB_NODE ...]
-                        List of Cassandra nodes; default "localhost")
+                        list of Cassandra nodes; default "localhost")
   -k KEYSPACE, --keyspace KEYSPACE
                         Cassandra keyspace
-  -p NUM_PROC, --processes NUM_PROC
-                        number of processes (default 1)
+  --processes NUM_PROC  number of processes (default 1)
+  --chunks NUM_CHUNKS   number of chunks to split tx/block range (default
+                        `NUM_PROC`)
   -f, --force           exchange rates are only available up to the previous
                         day. Without this option newer blocks are
                         automatically discarded.

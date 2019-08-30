@@ -16,15 +16,18 @@ class ExchangeRateParsingError(Exception):
 
 
 def fx_rates_url(start, end, base, *symbols):
-    symbols = [symbol.upper() for symbol in [*symbols]]
+    symbols = [symbol.upper() for symbol in symbols]
     symbols = ','.join(symbols)
-    return 'https://api.exchangeratesapi.io/history?start_at={start}&end_at={end}&symbols={symbols}&base={base}'.format(
-        start=start, end=end, symbols=symbols, base=base)
+    return "https://api.exchangeratesapi.io/history?" \
+           "start_at={start}&end_at={end}&symbols={symbols}&base={base}" \
+           .format(start=start, end=end, symbols=symbols, base=base)
 
 
 def historical_coin_url(slug, start, end):
-    return 'https://coinmarketcap.com/currencies/{slug}/historical-data/?start={start}&end={end}'.format(
-        slug=slug, start=start.replace('-', ''), end=end.replace('-', ''))
+    return "https://coinmarketcap.com/currencies/{slug}/historical-data/?" \
+           "start={start}&end={end}" \
+           .format(slug=slug,
+                   start=start.replace('-', ''), end=end.replace('-', ''))
 
 
 def all_url():
@@ -34,14 +37,16 @@ def all_url():
 def parse_all_response(resp):
     soup = bs4.BeautifulSoup(resp.text, 'lxml')
     table = soup.find('table')
-    columns = ['slug'] + [x.get('id', 'th-#')[3:] for x in table.thead.find_all('th')]
+    columns = ['slug'] + [x.get('id', 'th-#')[3:]
+                          for x in table.thead.find_all('th')]
 
     def get_val(td):
         tag = td
         # some columns like price store values within inner <a>
         if tag.find('a'):
             tag = tag.find('a')
-        # numeric columns store their value in these attributes in addition to text.
+        # numeric columns store their value in these attributes in addition
+        # to text.
         # use these attributes to avoid parsing $ and , in text
         for key in ['data-usd', 'data-supply']:
             val = tag.get(key)
@@ -68,10 +73,12 @@ def parse_historical_coin_response(resp):
 
     table = soup_hist.find('table')
     # they added *'s to the end of some columns
-    columns = [x.text.lower().replace(' ', '').rstrip('*') for x in table.thead.find_all('th')]
+    columns = [x.text.lower().replace(' ', '').rstrip('*')
+               for x in table.thead.find_all('th')]
 
     def get_val(td):
-        # numeric columns store their value in this attribute in addition to text
+        # numeric columns store their value in this attribute
+        # in addition to text
         val = td.get('data-format-value')
         if val:
             try:
@@ -93,7 +100,7 @@ def parse_historical_coin_response(resp):
 
 def parse_fx_rates_response(resp):
     fx_data = resp.json()
-    df = pd.DataFrame.from_dict(fx_data['rates'], orient='index') .reset_index()
+    df = pd.DataFrame.from_dict(fx_data['rates'], orient='index').reset_index()
     df.columns = ['date', 'fx_rate']
     return df
 
@@ -106,7 +113,7 @@ def lookup_slug(all_df, symbol):
         return None
     slug = df_row['slug'].tolist()
     if(len(slug) > 1):
-        raise ExchangeRateException("Found more than one possible slugs")
+        raise ExchangeRateParsingError("Found more than one possible slugs")
     return slug[0]
 
 
@@ -118,13 +125,14 @@ def query_required_currencies(session, keyspace, table):
     query = """SELECT column_name FROM system_schema.columns
                WHERE
                    keyspace_name = '{keyspace}' AND
-                   table_name = '{fx_table_name}';""".format(keyspace=keyspace,
-                                                       fx_table_name=table)
+                   table_name = '{fx_table_name}';""" \
+            .format(keyspace=keyspace, fx_table_name=table)
     result = session.execute(query)
     df = result._current_rows
     currencies = [symbol.upper() for symbol in list(df['column_name'])]
     if 'USD' not in currencies or 'DATE' not in currencies:
-        raise ExchangeRateParsingError("USD is mandatory and must be defined in the schema.")
+        raise ExchangeRateParsingError(
+            "USD is mandatory and must be defined in the schema.")
     currencies.remove('DATE')
     currencies.remove('USD')
     return currencies
@@ -152,10 +160,11 @@ def fetch_crypto_exchange_rates(start, end, crypto_currency):
     all_crypto_df = parse_all_response(requests.get(all_url()))
     slug = lookup_slug(all_crypto_df, crypto_currency)
     crypto_url = historical_coin_url(slug, start, end)
-    print("Fetching {} exchange rates from {}".format(crypto_currency, crypto_url))
+    print("Fetching {} exchange rates from {}"
+          .format(crypto_currency, crypto_url))
     crypto_resp = requests.get(crypto_url)
     crypto_df = parse_historical_coin_response(crypto_resp)
-    crypto_df = crypto_df[['date','close']].rename(columns={'close':'USD'})
+    crypto_df = crypto_df[['date', 'close']].rename(columns={'close': 'USD'})
     return crypto_df
 
 
@@ -226,7 +235,8 @@ def main():
         fiat_currencies = query_required_currencies(session, keyspace, table)
         print("Target fiat currencies: {}".format(fiat_currencies))
     except ExchangeRateParsingError as err:
-        print("Error while querying all required fiat currencies: {}".format(err))
+        print("Error while querying all required fiat currencies: {}"
+              .format(err))
 
     # Fetch crypto currency exchange rates in USD
     try:
@@ -239,13 +249,15 @@ def main():
         exchange_rates = crypto_df
         for fiat_currency in fiat_currencies:
             fx_url = fx_rates_url(start, end, "USD", fiat_currency)
-            print("Fetching conversion rates for {} from {}".format(fiat_currency, fx_url))
+            print("Fetching conversion rates for {} from {}"
+                  .format(fiat_currency, fx_url))
             fx_resp = requests.get(fx_url)
             fx_df = parse_fx_rates_response(fx_resp)
             merged_df = crypto_df.merge(fx_df, how="left", on='date')
-            merged_df['fx_rate'] = merged_df['fx_rate'].interpolate(method='linear')
+            merged_df['fx_rate'] = merged_df['fx_rate'] \
+                .interpolate(method='linear')
             merged_df['fx_rate'] = merged_df['fx_rate'].fillna(method='ffill')
-            merged_df['fx_rate'] = merged_df['fx_rate'].fillna(method='bfill')    
+            merged_df['fx_rate'] = merged_df['fx_rate'].fillna(method='bfill')
             merged_df[fiat_currency] = merged_df['USD'] * merged_df['fx_rate']
             merged_df = merged_df[['date', fiat_currency]]
             exchange_rates = exchange_rates.merge(merged_df, on='date')
@@ -257,18 +269,11 @@ def main():
         print("Inserted rates for {} days".format(len(exchange_rates)))
         insert_exchange_rates(session, exchange_rates)
     except ExchangeRateParsingError as err:
-        print("Error while inserting exchange rates into Cassandra: {}".format(err))
+        print("Error while inserting exchange rates into Cassandra: {}"
+              .format(err))
 
     cluster.shutdown()
 
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
-
-
-

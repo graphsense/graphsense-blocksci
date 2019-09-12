@@ -122,11 +122,9 @@ def query_required_currencies(session, keyspace, table):
         return pd.DataFrame(rows, columns=colnames)
     session.row_factory = pandas_factory
 
-    query = """SELECT column_name FROM system_schema.columns
-               WHERE
-                   keyspace_name = '{keyspace}' AND
-                   table_name = '{fx_table_name}';""" \
-            .format(keyspace=keyspace, fx_table_name=table)
+    query = f"""SELECT column_name FROM system_schema.columns
+                WHERE keyspace_name = '{keyspace}'
+                AND table_name = '{table}';"""
     result = session.execute(query)
     df = result._current_rows
     currencies = [symbol.upper() for symbol in list(df['column_name'])]
@@ -160,8 +158,7 @@ def fetch_crypto_exchange_rates(start, end, crypto_currency):
     all_crypto_df = parse_all_response(requests.get(all_url()))
     slug = lookup_slug(all_crypto_df, crypto_currency)
     crypto_url = historical_coin_url(slug, start, end)
-    print("Fetching {} exchange rates from {}"
-          .format(crypto_currency, crypto_url))
+    print(f"Fetching {crypto_currency} exchange rates from {crypto_url}")
     crypto_resp = requests.get(crypto_url)
     crypto_df = parse_historical_coin_response(crypto_resp)
     crypto_df = crypto_df[['date', 'close']].rename(columns={'close': 'USD'})
@@ -217,41 +214,38 @@ def main():
 
     crypto_currency = args.cryptocurrency
 
-    print("*** Starting exchange rate ingest for {} ***"
-          .format(crypto_currency))
+    print(f"*** Starting exchange rate ingest for {crypto_currency} ***")
 
     # Query most recent data in 'exchange_rates' table
     try:
         most_recent_date = query_most_recent_date(session, keyspace, table)
         if most_recent_date is not None:
             start = most_recent_date
-        print("Start date: {}".format(start))
-        print("End date: {}".format(end))
+        print(f"Start date: {start}")
+        print(f"End date: {end}")
     except ExchangeRateParsingError as err:
-        print("Error while querying most recent date: {}".format(err))
+        print(f"Error while querying most recent date: {err}")
 
     # Query all required fiat currencies from the 'exchange_rates' table
     try:
         fiat_currencies = query_required_currencies(session, keyspace, table)
-        print("Target fiat currencies: {}".format(fiat_currencies))
+        print(f"Target fiat currencies: {fiat_currencies}")
     except ExchangeRateParsingError as err:
-        print("Error while querying all required fiat currencies: {}"
-              .format(err))
+        print(f"Error while querying all required fiat currencies: {err}")
 
     # Fetch crypto currency exchange rates in USD
     try:
         crypto_df = fetch_crypto_exchange_rates(start, end, crypto_currency)
     except ExchangeRateParsingError as err:
-        print("Error while fetching exchange rates in USD: {}".format(err))
+        print(f"Error while fetching exchange rates in USD: {err}")
 
     # Query conversion rates and merge converted values in exchange rates
     try:
         exchange_rates = crypto_df
         for fiat_currency in fiat_currencies:
-            fx_url = fx_rates_url(start, end, "USD", fiat_currency)
-            print("Fetching conversion rates for {} from {}"
-                  .format(fiat_currency, fx_url))
-            fx_resp = requests.get(fx_url)
+            url = fx_rates_url(start, end, "USD", fiat_currency)
+            print(f"Fetching conversion rates for {fiat_currency} from {url}")
+            fx_resp = requests.get(url)
             fx_df = parse_fx_rates_response(fx_resp)
             merged_df = crypto_df.merge(fx_df, how="left", on='date')
             merged_df['fx_rate'] = merged_df['fx_rate'] \
@@ -262,15 +256,14 @@ def main():
             merged_df = merged_df[['date', fiat_currency]]
             exchange_rates = exchange_rates.merge(merged_df, on='date')
     except ExchangeRateParsingError as err:
-        print("Error while querying conversion rates: {}".format(err))
+        print(f"Error while querying conversion rates: {err}")
 
     # Insert final exchange rates into Cassandra 'exchange rates' table
     try:
-        print("Inserted rates for {} days".format(len(exchange_rates)))
+        print(f"Inserted rates for {len(exchange_rates)} days")
         insert_exchange_rates(session, keyspace, table, exchange_rates)
     except ExchangeRateParsingError as err:
-        print("Error while inserting exchange rates into Cassandra: {}"
-              .format(err))
+        print(f"Error while inserting exchange rates into Cassandra: {err}")
 
     cluster.shutdown()
 

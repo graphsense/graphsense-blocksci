@@ -138,12 +138,12 @@ def query_required_currencies(session, keyspace, table):
     return currencies
 
 
-def query_most_recent_date(session):
+def query_most_recent_date(session, keyspace, table):
     def pandas_factory(colnames, rows):
         return pd.DataFrame(rows, columns=colnames)
     session.row_factory = pandas_factory
 
-    query = """SELECT date from exchange_rates;"""
+    query = f"""SELECT date FROM {keyspace}.{table};"""
 
     result = session.execute(query)
     df = result._current_rows
@@ -168,11 +168,11 @@ def fetch_crypto_exchange_rates(start, end, crypto_currency):
     return crypto_df
 
 
-def insert_exchange_rates(session, exchange_rates_df):
+def insert_exchange_rates(session, keyspace, table, exchange_rates_df):
     colnames = ','.join(exchange_rates_df.columns)
     values = ','.join(['?' for i in range(len(exchange_rates_df.columns))])
-    query = """INSERT INTO exchange_rates({})
-               VALUES ({})""".format(colnames, values)
+    query = f"""INSERT INTO {keyspace}.{table}({colnames})
+                VALUES ({values})"""
     prepared = session.prepare(query)
 
     for index, row in exchange_rates_df.iterrows():
@@ -222,7 +222,7 @@ def main():
 
     # Query most recent data in 'exchange_rates' table
     try:
-        most_recent_date = query_most_recent_date(session)
+        most_recent_date = query_most_recent_date(session, keyspace, table)
         if most_recent_date is not None:
             start = most_recent_date
         print("Start date: {}".format(start))
@@ -267,7 +267,7 @@ def main():
     # Insert final exchange rates into Cassandra 'exchange rates' table
     try:
         print("Inserted rates for {} days".format(len(exchange_rates)))
-        insert_exchange_rates(session, exchange_rates)
+        insert_exchange_rates(session, keyspace, table, exchange_rates)
     except ExchangeRateParsingError as err:
         print("Error while inserting exchange rates into Cassandra: {}"
               .format(err))

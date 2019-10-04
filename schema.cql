@@ -45,10 +45,7 @@ CREATE TABLE block_transactions (
 );
 
 CREATE TABLE exchange_rates (
-    date    text,
-    usd     float,
-    eur     float,
-    gbp     float,
-    cad     float,
-    PRIMARY KEY (date)
+    date text PRIMARY KEY,
+    usd float,
+    eur float
 );

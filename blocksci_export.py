@@ -276,6 +276,18 @@ def tx_summary(tx):
             blocksci.heuristics.is_coinjoin(tx))
 
 
+def insert_summary_stats(cluster, keyspace, last_block):
+    total_blocks = last_block.height + 1
+    total_txs = last_block.txes[-1].index + 1
+    timestamp = last_block.timestamp
+
+    session = cluster.connect(keyspace)
+    cql_str = '''INSERT INTO summary_statistics
+                 (id, timestamp, no_blocks, no_txs)
+                 VALUES (%s, %s, %s, %s)'''
+    session.execute(cql_str, (keyspace, timestamp, total_blocks, total_txs))
+
+
 def main():
     parser = ArgumentParser(description='Export dumped BlockSci data '
                                         'to Apache Cassandra',
@@ -316,6 +328,8 @@ def main():
                         help='ingest only into the block_transactions table')
     parser.add_argument('--tx', action='store_true',
                         help='ingest only into the transactions table')
+    parser.add_argument('--statistics', action='store_true',
+                        help='ingest only into the summary statistics table')
 
     args = parser.parse_args()
 
@@ -355,7 +369,8 @@ def main():
 
     cluster = Cluster(args.db_nodes)
 
-    all_tables = not (args.blocks or args.block_tx or args.tx)
+    all_tables = not (args.blocks or args.block_tx or
+                      args.tx or args.statistics)
 
     # transactions
     if all_tables or args.tx:
@@ -392,6 +407,11 @@ def main():
                      VALUES (?, ?, ?, ?)'''
         generator = (block_summary(x) for x in block_range)
         insert(cluster, args.keyspace, cql_str, generator, 1000)
+
+    if all_tables or args.statistics:
+        insert_summary_stats(cluster,
+                             args.keyspace,
+                             chain[block_range[-1].height])
 
     cluster.shutdown()
 

@@ -49,3 +49,10 @@ CREATE TABLE exchange_rates (
     eur double,
     usd double
 );
+
+CREATE TABLE summary_statistics (
+    id text PRIMARY KEY,
+    no_blocks int,
+    no_txs bigint,
+    timestamp int
+)

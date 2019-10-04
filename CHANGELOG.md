@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
+### Changed
+- Removed exchange rates ingest from blocksci_export.py script (BlockSci uses the CoinDesk API, which supports only BTC)
+### Added
+- Added scripts to ingest exchanges from CoinDesk or CoinMarketCap
 
 ## [0.4.1] - 2019-06-28
 ### Changed

@@ -45,20 +45,7 @@ CREATE TABLE block_transactions (
 );
 
 CREATE TABLE exchange_rates (
-<<<<<<< HEAD
     height int PRIMARY KEY,
     eur double,
     usd double
-);
-
-CREATE TABLE summary_statistics (
-    id text PRIMARY KEY,
-    timestamp int,
-    no_blocks int,
-    no_txs bigint
-=======
-    date text PRIMARY KEY,
-    usd float,
-    eur float
->>>>>>> feature/exchange_rates
 );

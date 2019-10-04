@@ -6,8 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 ### Changed
 - Removed exchange rates ingest from blocksci_export.py script (BlockSci uses the CoinDesk API, which supports only BTC)
+- Updated utility script to check `block` and `exchange_rates` table
 ### Added
 - Added scripts to ingest exchanges from CoinDesk or CoinMarketCap
+- Added script to obtain first block height on a specific date
 
 ## [0.4.1] - 2019-06-28
 ### Changed

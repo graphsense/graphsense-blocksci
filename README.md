@@ -76,7 +76,7 @@ usage: blocksci_export.py [-h] -c BLOCKSCI_CONFIG [-d DB_NODE [DB_NODE ...]]
                           -k KEYSPACE [--processes NUM_PROC]
                           [--chunks NUM_CHUNKS] [-p]
                           [--start_index START_INDEX] [--end_index END_INDEX]
-                          [--blocks] [--block_tx] [--tx]
+                          [--blocks] [--block_tx] [--tx] [--statistics]
 
 Export dumped BlockSci data to Apache Cassandra
 
@@ -103,6 +103,7 @@ optional arguments:
   --blocks              ingest only into the blocks table
   --block_tx            ingest only into the block_transactions table
   --tx                  ingest only into the transactions table
+  --statistics          ingest only into the summary statistics table
 
 GraphSense - http://graphsense.info
 ```

@@ -308,10 +308,11 @@ def main():
                         type=int,
                         help='number of chunks to split tx/block range '
                              '(default `NUM_PROC`)')
-    parser.add_argument('-f', '--force', dest='force', action='store_true',
-                        help='exchange rates are only available up to the '
-                             'previous day. Without this option newer blocks '
-                             'are automatically discarded.')
+    parser.add_argument('-p', '--previous_day', dest='prev_day',
+                        action='store_true',
+                        help='only ingest blocks up to the previous day, '
+                             'since currency exchange rates might not be '
+                             'available for the current day.')
     parser.add_argument('--start_index', dest='start_index',
                         type=int, default=0,
                         help='start index of the blocks to export '
@@ -321,8 +322,6 @@ def main():
                         help='only blocks with height smaller than '
                              'this value are included; a negative index '
                              'counts back from the end (default -1)')
-    parser.add_argument('--exchange_rates', action='store_true',
-                        help='fetch and ingest only the exchange rates')
     parser.add_argument('--blocks', action='store_true',
                         help='ingest only into the blocks table')
     parser.add_argument('--block_tx', action='store_true',
@@ -336,18 +335,18 @@ def main():
 
     chain = blocksci.Blockchain(args.blocksci_config)
     print('Last parsed block: %d (%s)' %
-          (chain[-1].height, datetime.strftime(chain[-1].time, "%F %T")))
+          (chain[-1].height, datetime.strftime(chain[-1].time, '%F %T')))
     block_range = chain[args.start_index:args.end_index]
 
     if args.start_index >= len(chain):
-        print("Error: --start_index argument must be smaller than %d" %
+        print('Error: --start_index argument must be smaller than %d' %
               len(chain))
         raise SystemExit
 
     if not args.num_chunks:
         args.num_chunks = args.num_proc
 
-    if not args.force:
+    if args.prev_day:
         tstamp_today = time.mktime(datetime.today().date().timetuple())
         block_tstamps = block_range.time.astype(datetime)/1e9
         v = np.where(block_tstamps < tstamp_today)[0]
@@ -355,14 +354,11 @@ def main():
             last_index = np.max(v)
             last_height = block_range[last_index].height
             if last_height + 1 != chain[args.end_index].height:
-                print("Discarding blocks with missing exchange rates: "
-                      "%d ... %d" %
+                print('Discarding blocks %d ... %d' %
                       (last_height + 1, chain[args.end_index].height))
-                print("(use --force to enforce the export of these blocks)")
                 block_range = chain[args.start_index:(last_height + 1)]
         else:
-            print("No exchange rates available for the specified blocks "
-                  "(use --force to enforce the export)")
+            print('No blocks to ingest.')
             raise SystemExit
 
     num_blocks = len(block_range)
@@ -373,8 +369,12 @@ def main():
 
     cluster = Cluster(args.db_nodes)
 
+<<<<<<< HEAD
     all_tables = not (args.exchange_rates or args.blocks or
                       args.block_tx or args.tx or args.statistics)
+=======
+    all_tables = not (args.blocks or args.block_tx or args.tx)
+>>>>>>> feature/exchange_rates
 
     # transactions
     if all_tables or args.tx:
@@ -412,6 +412,7 @@ def main():
         generator = (block_summary(x) for x in block_range)
         insert(cluster, args.keyspace, cql_str, generator, 1000)
 
+<<<<<<< HEAD
     # exchange rates
     if all_tables or args.exchange_rates:
         print('Exchange rates')
@@ -429,6 +430,8 @@ def main():
     if all_tables or args.statistics:
         insert_summary_stats(cluster, args.keyspace, chain)
 
+=======
+>>>>>>> feature/exchange_rates
     cluster.shutdown()
 
 

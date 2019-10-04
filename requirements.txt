@@ -1,0 +1,6 @@
+cassandra-driver==3.19.0
+beautifulsoup4
+lxml
+requests
+pandas
+scipy

@@ -44,10 +44,10 @@ CREATE TABLE block_transactions (
     txs list<FROZEN<tx_summary>>
 );
 
-CREATE TABLE exchange_rates (
-    height int PRIMARY KEY,
-    eur double,
-    usd double
+CREATE TABLE exchange_rates_ (
+    date text PRIMARY KEY,
+    eur float,
+    usd float
 );
 
 CREATE TABLE summary_statistics (

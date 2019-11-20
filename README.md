@@ -65,7 +65,7 @@ blocksci_parser /var/data/blocksci_data/btc.cfg update
 To export BlockSci blockchain data to Apache Cassandra, create a keyspace
 
 ```
-cqlsh $CASSANDRA_HOST -f schema.cql
+cqlsh $CASSANDRA_HOST -f scripts/schema.cql
 ```
 
 and use the `blocksci_export.py` script:

@@ -4,6 +4,7 @@
 
 from argparse import ArgumentParser
 from datetime import date, datetime, timedelta
+import json
 
 import bs4
 from cassandra.cluster import Cluster
@@ -62,34 +63,19 @@ def parse_all_response(resp):
 
 def parse_historical_coin_response(resp):
     soup = bs4.BeautifulSoup(resp.text, 'lxml')
-    soup_hist = soup.find(id='historical-data')
-    if not soup_hist:
-        return
+    soup_hist = soup.find(id='__NEXT_DATA__')
 
-    table = soup_hist.find('table')
-    # they added *'s to the end of some columns
-    columns = [x.text.lower().replace(' ', '').rstrip('*')
-               for x in table.thead.find_all('th')]
+    json_data = json.loads(list(soup_hist)[0])['props']['initialState']
+    ohlcv_hist = json_data['cryptocurrency']['ohlcvHistorical']
 
-    def get_val(td):
-        # numeric columns store their value in this attribute
-        # in addition to text
-        val = td.get('data-format-value')
-        if val:
-            try:
-                return np.float64(val)
-            except ValueError:
-                return np.nan
-        return td.text
-
-    rows = []
-    for tr in table.tbody.find_all('tr'):
-        if tr.td.text == 'No data was found for the selected time period.':
-            return
-        rows.append([get_val(x) for x in tr.find_all('td')])
-
-    df = pd.DataFrame(columns=columns, data=rows)
-    df['date'] = pd.to_datetime(df.date).astype('str')
+    key = list(ohlcv_hist)[0]
+    if ohlcv_hist[key]:
+        df = pd.DataFrame([elem['quote']['USD']
+                           for elem in ohlcv_hist[key]['quotes']])
+        df['date'] = pd.to_datetime(df.timestamp).dt.strftime('%Y-%m-%d')
+        df = df[['date', 'close']].rename(columns={'close': 'USD'})
+    else:
+        raise ExchangeRateParsingError
     return df
 
 
@@ -159,7 +145,6 @@ def fetch_crypto_exchange_rates(start, end, crypto_currency):
     print(f'Fetching {crypto_currency} exchange rates from {crypto_url}')
     crypto_resp = requests.get(crypto_url)
     crypto_df = parse_historical_coin_response(crypto_resp)
-    crypto_df = crypto_df[['date', 'close']].rename(columns={'close': 'USD'})
     return crypto_df
 
 

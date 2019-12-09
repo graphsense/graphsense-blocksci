@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 - Added scripts to ingest exchanges from CoinDesk or CoinMarketCap
 - Added script to obtain first block height on a specific date
+### Fixed
+- Fixed script to scrape exchange rates from CoinMarketCap
 
 ## [0.4.1] - 2019-06-28
 ### Changed

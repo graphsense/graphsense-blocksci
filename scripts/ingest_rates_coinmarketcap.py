@@ -32,40 +32,22 @@ def historical_coin_url(slug, start, end):
 
 
 def parse_all_response(resp):
+
     soup = bs4.BeautifulSoup(resp.text, 'lxml')
-    table = soup.find('table')
-    columns = ['slug'] + \
-              [x.get('id', 'th-#')[3:] for x in table.thead.find_all('th')]
+    soup_id = soup.find(id='__NEXT_DATA__')
 
-    def get_val(td):
-        tag = td
-        # some columns like price store values within inner <a>
-        if tag.find('a'):
-            tag = tag.find('a')
-        # numeric columns store their value in these attributes in addition
-        # to text. use these attributes to avoid parsing $ and , in text
-        for key in ['data-usd', 'data-supply']:
-            val = tag.get(key)
-            if val:
-                try:
-                    return np.float64(val)
-                except ValueError:
-                    return np.nan
-        return tag.text
-
-    rows = []
-    for tr in table.tbody.find_all('tr'):
-        slug = tr.get('id')[3:]  # remove 'id-' prefix from id
-        rows.append([slug] + [get_val(x) for x in tr.find_all('td')])
-
-    return pd.DataFrame(columns=columns, data=rows)
+    json_data = json.loads(list(soup_id)[0])['props']['initialState']
+    json_data = json_data['cryptocurrency']['listingLatest']['data']
+    df = pd.DataFrame([{'symbol': elem['symbol'], 'slug':elem['slug']}
+                       for elem in json_data])
+    return df
 
 
 def parse_historical_coin_response(resp):
     soup = bs4.BeautifulSoup(resp.text, 'lxml')
-    soup_hist = soup.find(id='__NEXT_DATA__')
+    soup_id = soup.find(id='__NEXT_DATA__')
 
-    json_data = json.loads(list(soup_hist)[0])['props']['initialState']
+    json_data = json.loads(list(soup_id)[0])['props']['initialState']
     ohlcv_hist = json_data['cryptocurrency']['ohlcvHistorical']
 
     key = list(ohlcv_hist)[0]

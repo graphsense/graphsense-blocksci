@@ -27,7 +27,8 @@ address_type = {
     'address_type.multisig': 6,
     'address_type.nulldata': 7,
     'address_type.witness_pubkeyhash': 8,
-    'address_type.witness_scripthash': 9
+    'address_type.witness_scripthash': 9,
+    'address_type.witness_unknown': 10
 }
 
 
@@ -235,6 +236,8 @@ def addr_str(addr_obj):
     elif addr_obj.type == blocksci.address_type.nonstandard:
         res = None
     elif addr_obj.type == blocksci.address_type.nulldata:
+        res = None
+    elif addr_obj.type == blocksci.address_type.witness_unknown:
         res = None
     else:
         res = [addr_obj.address_string]

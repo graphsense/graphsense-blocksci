@@ -8,7 +8,6 @@ import json
 
 import bs4
 from cassandra.cluster import Cluster
-import numpy as np
 import pandas as pd
 import requests
 
@@ -17,11 +16,19 @@ class ExchangeRateParsingError(Exception):
     pass
 
 
-def fx_rates_url(start, end, base, *symbols):
-    symbols = [symbol.upper() for symbol in symbols]
-    symbols = ','.join(symbols)
-    return 'https://api.exchangeratesapi.io/history?' \
-           f'start_at={start}&end_at={end}&symbols={symbols}&base={base}'
+def fetch_fx_rates(symbol_list):
+    '''Fetch and preprocess FX rates from ECB.'''
+
+    FX_URL = 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.zip'
+    print(f'Fetching conversion rates for FIAT currencies:\n{FX_URL}')
+    rates_eur = pd.read_csv(FX_URL)  # exchange rates based on EUR
+    rates_eur = rates_eur.iloc[:, :-1]  # remove empty last column
+    rates_eur['EUR'] = 1.
+    # convert to values based on USD
+    rates_usd = rates_eur[symbol_list].div(rates_eur.USD, axis=0)
+    rates_usd['date'] = rates_eur.Date
+    print(f'Last record: {rates_usd.date.tolist()[0]}')
+    return rates_usd
 
 
 def historical_coin_url(slug, start, end):
@@ -32,6 +39,7 @@ def historical_coin_url(slug, start, end):
 
 
 def parse_all_response(resp):
+    '''Extract and parse summary table from CoinMarketCap'''
 
     soup = bs4.BeautifulSoup(resp.text, 'lxml')
     soup_id = soup.find(id='__NEXT_DATA__')
@@ -44,6 +52,8 @@ def parse_all_response(resp):
 
 
 def parse_historical_coin_response(resp):
+    '''Extract and parse historical exchange rates (JSON) from CoinMarketCap'''
+
     soup = bs4.BeautifulSoup(resp.text, 'lxml')
     soup_id = soup.find(id='__NEXT_DATA__')
 
@@ -55,20 +65,15 @@ def parse_historical_coin_response(resp):
         df = pd.DataFrame([elem['quote']['USD']
                            for elem in ohlcv_hist[key]['quotes']])
         df['date'] = pd.to_datetime(df.timestamp).dt.strftime('%Y-%m-%d')
-        df = df[['date', 'close']].rename(columns={'close': 'USD'})
+        df = df[['date', 'close']]
+        df.rename(columns={'close': 'USD'}, inplace=True)
     else:
         raise ExchangeRateParsingError
     return df
 
 
-def parse_fx_rates_response(resp):
-    fx_data = resp.json()
-    df = pd.DataFrame.from_dict(fx_data['rates'], orient='index').reset_index()
-    df.columns = ['date', 'fx_rate']
-    return df
-
-
 def lookup_slug(all_df, symbol):
+
     if not symbol.isupper():
         symbol = symbol.upper()
     df_row = all_df.loc[all_df['symbol'] == symbol]
@@ -81,6 +86,8 @@ def lookup_slug(all_df, symbol):
 
 
 def query_required_currencies(session, keyspace, table):
+    '''Fetch list of FIAT currencies from Cassandra table.'''
+
     def pandas_factory(colnames, rows):
         return pd.DataFrame(rows, columns=colnames)
     session.row_factory = pandas_factory
@@ -100,6 +107,8 @@ def query_required_currencies(session, keyspace, table):
 
 
 def query_most_recent_date(session, keyspace, table):
+    '''Fetch most recent entry from exchange rates table.'''
+
     def pandas_factory(colnames, rows):
         return pd.DataFrame(rows, columns=colnames)
     session.row_factory = pandas_factory
@@ -118,15 +127,16 @@ def query_most_recent_date(session, keyspace, table):
 
 
 def fetch_crypto_exchange_rates(start, end, crypto_currency):
-    '''Fetch most recent entry from exchange rates table.'''
+    '''Fetch cryptocurrency exchange rates from CoinMarketCap.'''
 
     all_url = 'https://coinmarketcap.com/all/views/all/'
     all_crypto_df = parse_all_response(requests.get(all_url))
     slug = lookup_slug(all_crypto_df, crypto_currency)
     crypto_url = historical_coin_url(slug, start, end)
-    print(f'Fetching {crypto_currency} exchange rates from {crypto_url}')
+    print(f'Fetching {crypto_currency} exchange rates:\n{crypto_url}')
     crypto_resp = requests.get(crypto_url)
     crypto_df = parse_historical_coin_response(crypto_resp)
+    print(f'Last record: {crypto_df.date.tolist()[0]}')
     return crypto_df
 
 
@@ -214,13 +224,12 @@ def main():
     # fetch crypto currency exchange rates in USD
     crypto_df = fetch_crypto_exchange_rates(start, end, crypto_currency)
 
+    fx_rates = fetch_fx_rates(fiat_currencies)
     # query conversion rates and merge converted values in exchange rates
     exchange_rates = crypto_df
     for fiat_currency in fiat_currencies:
-        url = fx_rates_url(start, end, 'USD', fiat_currency)
-        print(f'Fetching conversion rates for {fiat_currency} from {url}')
-        fx_resp = requests.get(url)
-        fx_df = parse_fx_rates_response(fx_resp)
+        fx_df = fx_rates[['date', fiat_currency]] \
+                .rename(columns={fiat_currency: 'fx_rate'})
         merged_df = crypto_df.merge(fx_df, how='left', on='date')
         merged_df['fx_rate'].interpolate(method='linear', inplace=True)
         merged_df['fx_rate'].fillna(method='ffill', inplace=True)

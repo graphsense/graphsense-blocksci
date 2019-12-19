@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+'''Utility script to check value in blocks and exchange_rates table'''
 
 from argparse import ArgumentParser
+from datetime import datetime
+import time
 from cassandra.cluster import Cluster
 
 
@@ -26,16 +30,20 @@ def main():
     max_val = 0
     for i, row in enumerate(res):
         max_val = max(max_val, row[0])
-    print("Max height in blocks table: %d" % max_val)
-    print("#blocks in blocks table: %d" % (i + 1))
-
-    cql_str = '''SELECT height FROM exchange_rates'''
+    cql_str = f'''SELECT timestamp FROM block WHERE height={max_val}'''
     res = session.execute(cql_str)
-    max_val = 0
+    timestamp = time.strftime('%Y-%m-%d %H:%M:%S',
+                              time.gmtime(res[0].timestamp))
+    print(f'Max height in blocks table: {max_val} ({timestamp})')
+    print(f'#rows in blocks table: %d' % (i + 1))
+
+    cql_str = '''SELECT date FROM exchange_rates'''
+    res = session.execute(cql_str)
+    max_val = datetime.strptime('1970-01-01', '%Y-%m-%d')
     for i, row in enumerate(res):
-        max_val = max(max_val, row[0])
-    print("Max height in exchange_rates table: %d" % max_val)
-    print("#blocks in exchange_rates table: %d" % (i + 1))
+        max_val = max(max_val, datetime.strptime(row[0], '%Y-%m-%d'))
+    print('Max date in exchange_rates table: %s' % max_val)
+    print('#rows in exchange_rates table: %d' % (i + 1))
     cluster.shutdown()
 
 

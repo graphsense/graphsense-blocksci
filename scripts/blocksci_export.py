@@ -27,7 +27,8 @@ address_type = {
     'address_type.multisig': 6,
     'address_type.nulldata': 7,
     'address_type.witness_pubkeyhash': 8,
-    'address_type.witness_scripthash': 9
+    'address_type.witness_scripthash': 9,
+    'address_type.witness_unknown': 10
 }
 
 
@@ -236,6 +237,8 @@ def addr_str(addr_obj):
         res = None
     elif addr_obj.type == blocksci.address_type.nulldata:
         res = None
+    elif addr_obj.type == blocksci.address_type.witness_unknown:
+        res = None
     else:
         res = [addr_obj.address_string]
     return res
@@ -276,6 +279,18 @@ def tx_summary(tx):
             blocksci.heuristics.is_coinjoin(tx))
 
 
+def insert_summary_stats(cluster, keyspace, last_block):
+    total_blocks = last_block.height + 1
+    total_txs = last_block.txes[-1].index + 1
+    timestamp = last_block.timestamp
+
+    session = cluster.connect(keyspace)
+    cql_str = '''INSERT INTO summary_statistics
+                 (id, timestamp, no_blocks, no_txs)
+                 VALUES (%s, %s, %s, %s)'''
+    session.execute(cql_str, (keyspace, timestamp, total_blocks, total_txs))
+
+
 def main():
     parser = ArgumentParser(description='Export dumped BlockSci data '
                                         'to Apache Cassandra',
@@ -296,10 +311,11 @@ def main():
                         type=int,
                         help='number of chunks to split tx/block range '
                              '(default `NUM_PROC`)')
-    parser.add_argument('-f', '--force', dest='force', action='store_true',
-                        help='exchange rates are only available up to the '
-                             'previous day. Without this option newer blocks '
-                             'are automatically discarded.')
+    parser.add_argument('-p', '--previous_day', dest='prev_day',
+                        action='store_true',
+                        help='only ingest blocks up to the previous day, '
+                             'since currency exchange rates might not be '
+                             'available for the current day.')
     parser.add_argument('--start_index', dest='start_index',
                         type=int, default=0,
                         help='start index of the blocks to export '
@@ -309,31 +325,31 @@ def main():
                         help='only blocks with height smaller than '
                              'this value are included; a negative index '
                              'counts back from the end (default -1)')
-    parser.add_argument('--exchange_rates', action='store_true',
-                        help='fetch and ingest only the exchange rates')
     parser.add_argument('--blocks', action='store_true',
                         help='ingest only into the blocks table')
     parser.add_argument('--block_tx', action='store_true',
                         help='ingest only into the block_transactions table')
     parser.add_argument('--tx', action='store_true',
                         help='ingest only into the transactions table')
+    parser.add_argument('--statistics', action='store_true',
+                        help='ingest only into the summary statistics table')
 
     args = parser.parse_args()
 
     chain = blocksci.Blockchain(args.blocksci_config)
     print('Last parsed block: %d (%s)' %
-          (chain[-1].height, datetime.strftime(chain[-1].time, "%F %T")))
+          (chain[-1].height, datetime.strftime(chain[-1].time, '%F %T')))
     block_range = chain[args.start_index:args.end_index]
 
     if args.start_index >= len(chain):
-        print("Error: --start_index argument must be smaller than %d" %
+        print('Error: --start_index argument must be smaller than %d' %
               len(chain))
         raise SystemExit
 
     if not args.num_chunks:
         args.num_chunks = args.num_proc
 
-    if not args.force:
+    if args.prev_day:
         tstamp_today = time.mktime(datetime.today().date().timetuple())
         block_tstamps = block_range.time.astype(datetime)/1e9
         v = np.where(block_tstamps < tstamp_today)[0]
@@ -341,14 +357,11 @@ def main():
             last_index = np.max(v)
             last_height = block_range[last_index].height
             if last_height + 1 != chain[args.end_index].height:
-                print("Discarding blocks with missing exchange rates: "
-                      "%d ... %d" %
+                print('Discarding blocks %d ... %d' %
                       (last_height + 1, chain[args.end_index].height))
-                print("(use --force to enforce the export of these blocks)")
                 block_range = chain[args.start_index:(last_height + 1)]
         else:
-            print("No exchange rates available for the specified blocks "
-                  "(use --force to enforce the export)")
+            print('No blocks to ingest.')
             raise SystemExit
 
     num_blocks = len(block_range)
@@ -359,8 +372,8 @@ def main():
 
     cluster = Cluster(args.db_nodes)
 
-    all_tables = not (args.exchange_rates or args.blocks or
-                      args.block_tx or args.tx)
+    all_tables = not (args.blocks or args.block_tx or
+                      args.tx or args.statistics)
 
     # transactions
     if all_tables or args.tx:
@@ -398,19 +411,10 @@ def main():
         generator = (block_summary(x) for x in block_range)
         insert(cluster, args.keyspace, cql_str, generator, 1000)
 
-    # exchange rates
-    if all_tables or args.exchange_rates:
-        print('Exchange rates')
-        cql_str = '''INSERT INTO exchange_rates
-                     (height, eur, usd) VALUES (?, ?, ?)'''
-        cc_eur = blocksci.currency.CurrencyConverter(currency='EUR')
-        cc_usd = blocksci.currency.CurrencyConverter(currency='USD')
-        generator = ((elem.height,
-                      cc_eur.exchangerate(date.fromtimestamp(elem.timestamp)),
-                      cc_usd.exchangerate(date.fromtimestamp(elem.timestamp)))
-                     for elem in block_range
-                     if date.fromtimestamp(elem.timestamp) < date.today())
-        insert(cluster, args.keyspace, cql_str, generator, 1000)
+    if all_tables or args.statistics:
+        insert_summary_stats(cluster,
+                             args.keyspace,
+                             chain[block_range[-1].height])
 
     cluster.shutdown()
 

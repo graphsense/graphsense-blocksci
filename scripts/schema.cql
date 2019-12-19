@@ -40,12 +40,19 @@ CREATE TYPE tx_summary (
 );
 
 CREATE TABLE block_transactions (
-     height int PRIMARY KEY,
-     txs list<FROZEN<tx_summary>>
+    height int PRIMARY KEY,
+    txs list<FROZEN<tx_summary>>
 );
 
 CREATE TABLE exchange_rates (
-    height int PRIMARY KEY,
-    eur    double,
-    usd    double
+    date text PRIMARY KEY,
+    eur float,
+    usd float
+);
+
+CREATE TABLE summary_statistics (
+    id text PRIMARY KEY,
+    no_blocks int,
+    no_txs bigint,
+    timestamp int
 );

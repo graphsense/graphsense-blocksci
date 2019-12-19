@@ -1,4 +1,3 @@
-
 # A dockerized component to synchronize BlockSci data to Apache Cassandra 
 
 ## Prerequisites
@@ -66,18 +65,18 @@ blocksci_parser /var/data/blocksci_data/btc.cfg update
 To export BlockSci blockchain data to Apache Cassandra, create a keyspace
 
 ```
-cqlsh $CASSANDRA_HOST -f schema.cql
+cqlsh $CASSANDRA_HOST -f scripts/schema.cql
 ```
 
 and use the `blocksci_export.py` script:
 
 ```
-blocksci_export.py -h
+python3 blocksci_export.py -h
 usage: blocksci_export.py [-h] -c BLOCKSCI_CONFIG [-d DB_NODE [DB_NODE ...]]
                           -k KEYSPACE [--processes NUM_PROC]
-                          [--chunks NUM_CHUNKS] [-f]
+                          [--chunks NUM_CHUNKS] [-p]
                           [--start_index START_INDEX] [--end_index END_INDEX]
-                          [--exchange_rates] [--blocks] [--block_tx] [--tx]
+                          [--blocks] [--block_tx] [--tx] [--statistics]
 
 Export dumped BlockSci data to Apache Cassandra
 
@@ -92,22 +91,82 @@ optional arguments:
   --processes NUM_PROC  number of processes (default 1)
   --chunks NUM_CHUNKS   number of chunks to split tx/block range (default
                         `NUM_PROC`)
-  -f, --force           exchange rates are only available up to the previous
-                        day. Without this option newer blocks are
-                        automatically discarded.
+  -p, --previous_day    only ingest blocks up to the previous day, since
+                        currency exchange rates might not be available for the
+                        current day.
   --start_index START_INDEX
                         start index of the blocks to export (default 0)
   --end_index END_INDEX
                         only blocks with height smaller than this value are
                         included; a negative index counts back from the end
                         (default -1)
-  --exchange_rates      fetch and ingest only the exchange rates
   --blocks              ingest only into the blocks table
   --block_tx            ingest only into the block_transactions table
   --tx                  ingest only into the transactions table
+  --statistics          ingest only into the summary statistics table
 
 GraphSense - http://graphsense.info
 ```
 
+## Exchange rates
 
-[apache-cassandra]: http://cassandra.apache.org/download/
+For Bitcoin we use the [CoinDesk API][coindesk] to obtain exchange rates, see
+`scripts/ingest_rates_coindesk.py`:
+
+```
+python3 scripts/ingest_rates_coindesk.py -h
+usage: ingest_rates_coindesk.py [-h] [-d DB_NODE [DB_NODE ...]] [-f] -k
+                                KEYSPACE [-t TABLE] [--start_date START]
+                                [--end_date END]
+
+Ingest exchange rates into Cassandra
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -d DB_NODE [DB_NODE ...], --db_nodes DB_NODE [DB_NODE ...]
+                        list of Cassandra nodes; default "localhost"
+  -f, --force           do not fetch most recent entries from Cassandra and
+                        overwrite existing records
+  -k KEYSPACE, --keyspace KEYSPACE
+                        Cassandra keyspace
+  -t TABLE, --table TABLE
+                        name of the target exchange rate table
+  --start_date START    start date for fetching exchange rates
+  --end_date END        end date for fetching exchange rates
+
+GraphSense - http://graphsense.info
+
+```
+
+For all other currencies the exchange rates are obtained through
+[CoinMarketCap][coinmarketcap], see `scripts/ingest_rates_coinmarketcap.py`:
+
+```
+python3 scripts/ingest_rates_coinmarketcap.py -h
+usage: ingest_rates_coinmarketcap.py [-h] [-d DB_NODE [DB_NODE ...]] [-f] -k
+                                     KEYSPACE [-t TABLE] [--start_date START]
+                                     [--end_date END] -c CRYPTOCURRENCY
+
+Ingest exchange rates into Cassandra
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -d DB_NODE [DB_NODE ...], --db_nodes DB_NODE [DB_NODE ...]
+                        list of Cassandra nodes; default "localhost"
+  -f, --force           do not fetch most recent entries from Cassandra and
+                        overwrite existing records
+  -k KEYSPACE, --keyspace KEYSPACE
+                        Cassandra keyspace
+  -t TABLE, --table TABLE
+                        name of the target exchange rate table
+  --start_date START    start date for fetching exchange rates
+  --end_date END        end date for fetching exchange rates
+  -c CRYPTOCURRENCY, --cryptocurrency CRYPTOCURRENCY
+                        target cryptocurrency
+
+GraphSense - http://graphsense.info
+```
+
+[apache-cassandra]: http://cassandra.apache.org/download
+[coindesk]: https://www.coindesk.com/api
+[coinmarketcap]: https://coinmarketcap.com

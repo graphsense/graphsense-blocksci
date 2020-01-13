@@ -1,6 +1,7 @@
 FROM ubuntu:18.04 as builder
 LABEL maintainer="contact@graphsense.info"
 
+COPY requirements-docker.txt /tmp/requirements-docker.txt
 RUN apt-get update && \
     # install packages
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -42,8 +43,7 @@ RUN apt-get update && \
     make install && \
     cd /opt/BlockSci && \
     # python
-    pip3 install requests && \
-    pip3 install cassandra-driver==3.16.0 && \
+    pip3 install -r /tmp/requirements-docker.txt && \
     pip3 install -e blockscipy && \
     # clean up
     cd / && \

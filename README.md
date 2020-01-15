@@ -1,4 +1,4 @@
-# A dockerized component to synchronize BlockSci data to Apache Cassandra 
+# A dockerized component to synchronize BlockSci data to Apache Cassandra
 
 ## Prerequisites
 
@@ -28,14 +28,17 @@ and test if it is running
 ## BlockSci Docker container
 
 Build docker image
+
 ```
 docker build -t blocksci .
 ```
+
 or `./docker/build.sh`
 
 Start docker container
+
 ```
-./docker/start.sh CONTAINER_NAME BLOCKCHAIN_DATA_DIR BLOCKCHAIN_DATA_DIR
+./docker/start.sh CONTAINER_NAME BLOCKCHAIN_DATA_DIR BLOCKSCI_DATA_DIR
 ```
 
 `CONTAINER_NAME` specifies the name of the docker container;
@@ -45,19 +48,23 @@ data directories on the host system. `BLOCKCHAIN_DATA_DIR` is mapped to
 `/var/data/blocksci_data` inside the docker container.
 
 Attach docker container
+
 ```
 docker exec -ti blocksci_btc /bin/bash
 ```
+
 or `./docker/attach.sh blocksci_btc`
 
 ## BlockSci export
 
 Create a BlockSci config file, e.g., for Bitcoin using the disk mode parser
+
 ```
 blocksci_parser /var/data/blocksci_data/btc.cfg generate-config bitcoin /var/data/blocksci_data --max-block '-6' --disk /var/data/block_data
 ```
 
 To run the BlockSci parser, use
+
 ```
 blocksci_parser /var/data/blocksci_data/btc.cfg update
 ```

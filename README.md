@@ -35,17 +35,27 @@ docker build -t blocksci .
 
 or `./docker/build.sh`
 
+Create an user-defined bridge network
+
+```
+docker network create graphsense-net
+```
+
 Start docker container
 
 ```
-./docker/start.sh CONTAINER_NAME BLOCKCHAIN_DATA_DIR BLOCKSCI_DATA_DIR
+./docker/start.sh CONTAINER_NAME BLOCKCHAIN_DATA_DIR BLOCKSCI_DATA_DIR SCRIPT_DIR
 ```
 
 `CONTAINER_NAME` specifies the name of the docker container;
 `BLOCKCHAIN_DATA_DIR` and `BLOCKSCI_DATA_DIR` are the locations of the
-data directories on the host system. `BLOCKCHAIN_DATA_DIR` is mapped to
-`/var/data/block_data`, and `BLOCKSCI_DATA_DIR` corresponds to
-`/var/data/blocksci_data` inside the docker container.
+data directories on the host system, and `SCRIPT_DIR` the location of
+additional scripts or other files. They arguments are mapped to the following
+locations inside the docker container:
+
+- `BLOCKCHAIN_DATA_DIR`: `/var/data/block_data`
+- `BLOCKSCI_DATA_DIR`: `/var/data/blocksci_data`
+- `SCRIPT_DIR`: `/opt/scripts`
 
 Attach docker container
 

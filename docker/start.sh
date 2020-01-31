@@ -1,7 +1,7 @@
 #!/bin/sh
 
 if [ $# -ne 4 ]; then
-    echo "Usage: $0 CONTAINER_NAME BLOCKCHAIN_DATA_DIR BLOCKSCI_DATA_DIR"
+    echo "Usage: $0 CONTAINER_NAME BLOCKCHAIN_DATA_DIR BLOCKSCI_DATA_DIR SCRIPT_DIR"
     exit 1
 fi
 

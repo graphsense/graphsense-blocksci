@@ -2,7 +2,7 @@
 
 from abc import ABC
 from argparse import ArgumentParser
-from datetime import date, datetime
+from datetime import datetime
 from functools import wraps
 from itertools import islice
 from multiprocessing import Pool, Value

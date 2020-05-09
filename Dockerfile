@@ -29,7 +29,7 @@ RUN apt-get update && \
   python3-wheel \
   wget
 
-# add blocksci
+# add BlockSci
 RUN cd /opt && \
   git clone https://github.com/citp/BlockSci.git && \
   cd BlockSci && \

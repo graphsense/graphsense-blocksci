@@ -23,7 +23,7 @@ fi
 docker stop "$1"
 docker rm "$1"
 docker run --restart=always -d --name "$1" \
-    --network=graphsense-net \
+    --network=graphsense-global-net \
     --cap-drop all \
     -v "$2":/var/data/block_data \
     -v "$3":/var/data/blocksci_data \

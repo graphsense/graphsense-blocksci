@@ -1,7 +1,7 @@
 FROM ubuntu:18.04 as builder
 LABEL maintainer="contact@graphsense.info"
 
-# Install dependencies
+# install dependencies
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   autoconf \
@@ -29,7 +29,7 @@ RUN apt-get update && \
   python3-wheel \
   wget
 
-# Add BlockSci
+# add blocksci
 RUN cd /opt && \
   git clone https://github.com/citp/BlockSci.git && \
   cd BlockSci && \
@@ -37,7 +37,7 @@ RUN cd /opt && \
   git submodule init && \
   git submodule update --recursive
 
-# Build
+# build
 RUN cd /opt/BlockSci && \
   mkdir release && \
   cd release && \
@@ -45,14 +45,14 @@ RUN cd /opt/BlockSci && \
   make && \
   make install
 
-# Configure Cassandra communication
+COPY requirements-docker.txt /tmp/requirements.txt
+
+# install Python packages
 RUN cd /opt/BlockSci && \
-  # python
-  pip3 install requests && \
-  pip3 install cassandra-driver==3.16.0 && \
+  pip3 install -r /tmp/requirements.txt && \
   pip3 install -e blockscipy
 
-# Cleanup
+# cleanup
 RUN cd / && \
   mv /opt/BlockSci/blockscipy /opt/ && \
   rm -rf /opt/BlockSci/* && \

@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.4.3] - 2020-05-11
+### Changed
+- Use `execute_concurrent_with_args` for ingest instead of batch statements
+- Fixed column name in Cassandra schema
+- Pinned versions numbers for pip packages
+- Improved Dockerfile
+
 ## [0.4.2] - 2019-12-19
 ### Changed
 - Removed exchange rates ingest from blocksci_export.py script (BlockSci uses the CoinDesk API, which supports only BTC)

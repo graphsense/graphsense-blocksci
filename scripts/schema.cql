@@ -13,7 +13,7 @@ CREATE TABLE block (
 CREATE TYPE tx_input_output (
     address list<text>,
     value bigint,
-    tx_type smallint
+    address_type smallint
 );
 
 CREATE TABLE transaction (

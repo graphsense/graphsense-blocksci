@@ -1,6 +1,6 @@
-cassandra-driver==3.19.0
-beautifulsoup4
-lxml
-requests
-pandas
-scipy
+cassandra-driver==3.23.0
+beautifulsoup4==4.9.0
+lxml==4.5.0
+requests==2.23.0
+pandas==1.0.3
+numpy==1.18.4

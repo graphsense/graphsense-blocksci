@@ -2,7 +2,7 @@
 
 from abc import ABC
 from argparse import ArgumentParser
-from datetime import date, datetime
+from datetime import datetime
 from functools import wraps
 from itertools import islice
 from multiprocessing import Pool, Value
@@ -11,7 +11,7 @@ import time
 
 from cassandra import ConsistencyLevel
 from cassandra.cluster import Cluster
-from cassandra.query import BatchStatement
+from cassandra.concurrent import execute_concurrent_with_args
 import numpy as np
 import blocksci
 
@@ -89,23 +89,22 @@ class TxQueryManager(QueryManager):
 
         idx_start, idx_end = params
 
-        batch_size = 500
-        batch_stmt = BatchStatement()
+        param_list = []
 
-        for index in range(idx_start, idx_end, batch_size):
+        for index in range(idx_start, idx_end, cls.concurrency):
 
-            curr_batch_size = min(batch_size, idx_end - index)
+            curr_batch_size = min(cls.concurrency, idx_end - index)
             for i in range(0, curr_batch_size):
                 tx = blocksci.Tx(index + i, cls.chain)
-                batch_stmt.add(cls.prepared_stmt, tx_summary(tx))
+                param_list.append(tx_summary(tx))
 
-            try:
-                cls.session.execute(batch_stmt)
-            except Exception as e:
-                # ingest single transactions if batch ingest fails
-                # (batch too large error)
-                print(e)
-                for i in range(0, curr_batch_size):
+            results = execute_concurrent_with_args(
+                session=cls.session,
+                statement=cls.prepared_stmt,
+                parameters=param_list,
+                concurrency=cls.concurrency)
+            for (i, (success, _)) in enumerate(results):
+                if not success:
                     while True:
                         try:
                             tx = blocksci.Tx(index + i, cls.chain)
@@ -115,7 +114,8 @@ class TxQueryManager(QueryManager):
                             print(e)
                             continue
                         break
-            batch_stmt.clear()
+
+            param_list = []
 
             with cls.counter.get_lock():
                 cls.counter.value += curr_batch_size
@@ -131,24 +131,24 @@ class BlockTxQueryManager(QueryManager):
 
         idx_start, idx_end = params
 
-        batch_size = 25
-        batch_stmt = BatchStatement()
+        param_list = []
 
-        for index in range(idx_start, idx_end, batch_size):
+        for index in range(idx_start, idx_end, cls.concurrency):
 
-            curr_batch_size = min(batch_size, idx_end - index)
+            curr_batch_size = min(cls.concurrency, idx_end - index)
             for i in range(0, curr_batch_size):
                 block = cls.chain[index + i]
                 block_tx = [block.height, [tx_stats(x) for x in block.txes]]
-                batch_stmt.add(cls.prepared_stmt, block_tx)
+                param_list.append(block_tx)
 
-            try:
-                cls.session.execute(batch_stmt)
-            except Exception as e:
-                # ingest single blocks batch ingest fails
-                # (batch too large error)
-                print(e)
-                for i in range(0, curr_batch_size):
+            results = execute_concurrent_with_args(
+                session=cls.session,
+                statement=cls.prepared_stmt,
+                parameters=param_list,
+                concurrency=cls.concurrency)
+
+            for (i, (success, _)) in enumerate(results):
+                if not success:
                     while True:
                         try:
                             block = cls.chain[index + i]
@@ -160,7 +160,8 @@ class BlockTxQueryManager(QueryManager):
                             print(e)
                             continue
                         break
-            batch_stmt.clear()
+
+            param_list = []
 
             with cls.counter.get_lock():
                 cls.counter.value += curr_batch_size
@@ -168,24 +169,37 @@ class BlockTxQueryManager(QueryManager):
 
 
 @timing
-def insert(cluster, keyspace, cql_stmt, generator, batch_size):
+def insert(cluster, keyspace, cql_stmt, generator, concurrency=100):
     session = cluster.connect(keyspace)
     session.default_timeout = 60
     session.default_consistency_level = ConsistencyLevel.LOCAL_ONE
     prepared_stmt = session.prepare(cql_stmt)
-    batch_stmt = BatchStatement()
 
-    values = take(batch_size, generator)
+    values = take(concurrency, generator)
     count = 0
     while values:
-        batch_stmt.add_all([prepared_stmt]*batch_size, values)
-        session.execute(batch_stmt)
 
-        values = take(batch_size, generator)
-        batch_stmt.clear()
+        results = execute_concurrent_with_args(
+            session=session,
+            statement=prepared_stmt,
+            parameters=values,
+            concurrency=concurrency)
+
+        for (i, (success, _)) in enumerate(results):
+            if not success:
+                while True:
+                    try:
+                        session.execute(prepared_stmt, values[i])
+                    except Exception as e:
+                        print(e)
+                        continue
+                    break
+
+        values = take(concurrency, generator)
+
         if (count % 1e3) == 0:
             print('#blocks {:,.0f}'.format(count), end='\r')
-        count += batch_size
+        count += concurrency
 
 
 def take(n, iterable):
@@ -409,7 +423,7 @@ def main():
                      (height, block_hash, timestamp, no_transactions)
                      VALUES (?, ?, ?, ?)'''
         generator = (block_summary(x) for x in block_range)
-        insert(cluster, args.keyspace, cql_str, generator, 1000)
+        insert(cluster, args.keyspace, cql_str, generator, 100)
 
     if all_tables or args.statistics:
         insert_summary_stats(cluster,

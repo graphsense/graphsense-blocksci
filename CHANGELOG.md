@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.4.4] - 2020-06-12
+### Change
+- Updated dependencies (`requirements.txt`)
+
 ## [0.4.3] - 2020-05-11
 ### Changed
 - Use `execute_concurrent_with_args` for ingest instead of batch statements

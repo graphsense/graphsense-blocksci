@@ -3,8 +3,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## Unreleased
+### Changed
+- Upgrade to BlockSci v0.7.0 (requires reparsing)
+
 ## [0.4.4] - 2020-06-12
-### Change
+### Changed
 - Updated dependencies (`requirements.txt`)
 
 ## [0.4.3] - 2020-05-11

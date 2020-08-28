@@ -33,7 +33,7 @@ RUN apt-get update && \
 RUN cd /opt && \
   git clone https://github.com/citp/BlockSci.git && \
   cd BlockSci && \
-  git checkout "v0.6" && \
+  git checkout tags/v0.7.0 -b v0.7.0 && \
   git submodule init && \
   git submodule update --recursive
 

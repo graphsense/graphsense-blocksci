@@ -4,7 +4,7 @@
 
 from argparse import ArgumentParser
 from datetime import date, datetime, timedelta
-
+import dateutil.parser as isoparser
 from cassandra.cluster import Cluster
 import pandas as pd
 import requests
@@ -146,7 +146,7 @@ def main():
 
     print(f'*** Starting exchange rate ingest for BTC ***')
 
-    if datetime.fromisoformat(start) < datetime.fromisoformat(MIN_START):
+    if isoparser.isoparse(start) < isoparser.isoparse(MIN_START):
         print(f'Warning: Exchange rates not available before {MIN_START}')
         start = MIN_START
 
@@ -159,7 +159,7 @@ def main():
     print(f'Start date: {start}')
     print(f'End date: {end}')
 
-    if datetime.fromisoformat(start) > datetime.fromisoformat(end):
+    if isoparser.isoparse(start) > isoparser.isoparse(end):
         print("Error: start date after end date.")
         cluster.shutdown()
         raise SystemExit

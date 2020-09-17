@@ -64,7 +64,6 @@ COPY --from=builder /opt/BlockSci/blockscipy/blocksci /usr/local/lib/python3.6/d
 COPY --from=builder /usr/bin/blocksci_* /usr/local/bin/
 COPY --from=builder /usr/lib/x86_64-linux-gnu/libblocksci.so /usr/local/lib/
 COPY --from=builder /usr/local/lib/python3.6/dist-packages /usr/local/lib/python3.6/dist-packages
-COPY scripts/blocksci_export.py /usr/local/bin/blocksci_export.py
 
 RUN useradd -m -d /home/dockeruser -r -u 10000 dockeruser && \
   apt-get update && \
@@ -82,6 +81,9 @@ RUN useradd -m -d /home/dockeruser -r -u 10000 dockeruser && \
   mkdir -p /var/data/blocksci_data && \
   mkdir -p /var/data/block_data && \
   chown -R dockeruser /var/data/
+
+COPY scripts/blocksci_export.py /usr/local/bin/blocksci_export.py
+
 
 USER dockeruser
 WORKDIR /home/dockeruser

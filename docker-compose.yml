@@ -1,0 +1,28 @@
+version: '2'
+services:
+  parser:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: graphsense_parser
+    container_name: blocksci_parser
+    volumes:
+     - "./scripts/:/opt/scripts"
+     - "$BLOCKSCI_DATADIR:/var/data/blocksci_data/:rw"
+     - "$BLOCK_DATADIR:/var/data/block_data/:rw"
+    networks:
+     - graphsense-global-net
+    env_file: .env
+    entrypoint: ["/home/dockeruser/entrypoint.sh"]
+
+  exporter:
+    image: graphsense_parser
+    container_name: blocksci_exporter
+    env_file: .env
+    extends: parser
+    entrypoint: ["python3", "-u", "/opt/scripts/blocksci_export.py", "-c", "$CONFIG_FILE", "-d", "$CASSANDRA_HOST", "-k", "$RAW_KEYSPACE", "--processes", "$PROCESSES", "--start_index", "$FROM_BLOCK", "--end_index", "$TO_BLOCK"]
+networks:
+  graphsense-global-net:
+    external: true
+      
+   

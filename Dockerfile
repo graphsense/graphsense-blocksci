@@ -83,7 +83,7 @@ RUN useradd -m -d /home/dockeruser -r -u 10000 dockeruser && \
   chown -R dockeruser /var/data/
 
 COPY scripts/blocksci_export.py /usr/local/bin/blocksci_export.py
-
+ADD entrypoint.sh /home/dockeruser
 
 USER dockeruser
 WORKDIR /home/dockeruser

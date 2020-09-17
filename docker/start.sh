@@ -20,8 +20,8 @@ if [ ! -d "$4" ]; then
     exit 1
 fi
 
-docker stop "$1"
-docker rm "$1"
+docker stop "$1" || true
+docker rm "$1" || true
 docker run --restart=always -d --name "$1" \
     --network=graphsense-global-net \
     --cap-drop all \

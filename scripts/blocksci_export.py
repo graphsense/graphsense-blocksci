@@ -119,7 +119,7 @@ class TxQueryManager(QueryManager):
 
             with cls.counter.get_lock():
                 cls.counter.value += curr_batch_size
-            print('#tx {:,.0f}'.format(cls.counter.value), end='\r')
+            print('#tx {:,.0f}/{:,.0f}'.format(cls.counter.value, idx_end - idx_start))
 
 
 class BlockTxQueryManager(QueryManager):
@@ -165,7 +165,7 @@ class BlockTxQueryManager(QueryManager):
 
             with cls.counter.get_lock():
                 cls.counter.value += curr_batch_size
-            print('#blocks {:,.0f}'.format(cls.counter.value), end='\r')
+            print('#blocks {:,.0f}/{:,.0f}'.format(cls.counter.value, idx_end - idx_start), end='\r')
 
 
 @timing
@@ -198,7 +198,7 @@ def insert(cluster, keyspace, cql_stmt, generator, concurrency=100):
         values = take(concurrency, generator)
 
         if (count % 1e3) == 0:
-            print('#blocks {:,.0f}'.format(count), end='\r')
+            print('#blocks {:,.0f}'.format(count))
         count += concurrency
 
 

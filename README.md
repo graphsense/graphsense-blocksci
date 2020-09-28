@@ -1,5 +1,43 @@
 # A dockerized component to synchronize BlockSci data to Apache Cassandra
 
+## Quick docker setup
+
+### Prerequisites
+Make sure the latest versions of Docker and docker-compose are installed. https://docs.docker.com/compose/install/
+
+This docker composition consists of two services:
+ - Parser, which reads Bitcoin client's data directory and puts it into a more useful format.
+ - Exporter, which copies data read by parser to cassandra's raw keyspace.
+
+Parser assumes that:
+ - A [bitcoin client](https://bitcoin.org/en/download) has been running for a while and has fetched some blocks. A `BLOCK_DATADIR` variable points to data directory of Bitcoin client.
+ - `BLOCKSCI_DATADIR` variable points to a directory with enough free space (around the size of blockchain).
+ 
+ Exporter assumes that:
+  - A parser has completed parsing block files;
+  - There is a cassandra instance running.
+
+**It is possible to set up all required services using a single docker-compose evironment. For that, check out the `graphsense-setup` project.** Alternatively, you can set up each required service manually, in which case, keep on reading.
+
+### Configuration
+Create a new configuration by copying the `env.example` file to `.env`.
+Modify the configuration match your environment, or keep everything intact.
+
+- `BLOCK_DATADIR` must point to data directory of a Bitcoin client.
+- `FROM_BLOCK` and `TO_BLOCK` must specify block range to process. Set the latter to a negative number to count backwards from the latest block, or to `-1` to fetch up until the last block.
+- Change `PROCESSES` variable to the number of cores you want to give to exporter.
+
+
+Apply the configuation by adding this line to `docker-compose.yml`:
+```yaml
+services:
+    transform:
+        ...
+        env_file: .env
+        ...
+```
+
+
 ## Prerequisites
 
 ### Apache Cassandra

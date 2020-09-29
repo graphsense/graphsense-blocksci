@@ -5,4 +5,4 @@ if [ $# -ne 2 ]; then
     exit 1
 fi
 
-m4 -Dgraphsense=$2 schema.cql | cqlsh $1
+m4 -Dgraphsense=$2 schema.cql | cqlsh $1 --cqlversion="3.4.4"

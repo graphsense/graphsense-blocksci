@@ -77,12 +77,22 @@ RUN useradd -m -d /home/dockeruser -r -u 10000 dockeruser && \
   python3-crypto \
   python3-pandas \
   python3-pip \
+  m4 \
+  python \
+  python-pip \
+  python-setuptools \
   python3-psutil && \
   mkdir -p /var/data/blocksci_data && \
   mkdir -p /var/data/block_data && \
   chown -R dockeruser /var/data/
 
+# Dependencies for creating the schema.
+# Sadly, cqlsh only supports python2
+RUN pip install cqlsh==5.0.4
+
 COPY scripts/blocksci_export.py /usr/local/bin/blocksci_export.py
+ADD scripts/*.cql /home/dockeruser
+ADD scripts/*.sh /home/dockeruser
 ADD entrypoint.sh /home/dockeruser
 
 USER dockeruser

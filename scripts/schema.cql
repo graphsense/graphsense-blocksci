@@ -1,5 +1,4 @@
-DROP KEYSPACE IF EXISTS graphsense;
-CREATE KEYSPACE graphsense WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
+CREATE KEYSPACE IF NOT EXISTS graphsense WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
 
 USE graphsense;
 

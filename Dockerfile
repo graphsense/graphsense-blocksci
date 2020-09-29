@@ -90,7 +90,7 @@ RUN useradd -m -d /home/dockeruser -r -u 10000 dockeruser && \
 # Sadly, cqlsh only supports python2
 RUN pip install cqlsh==5.0.4
 
-COPY scripts/blocksci_export.py /usr/local/bin/blocksci_export.py
+COPY scripts/blocksci_export.py scripts/ingest_rates_coindesk.py /usr/local/bin/
 ADD scripts/*.cql /home/dockeruser
 ADD scripts/*.sh /home/dockeruser
 ADD entrypoint.sh /home/dockeruser

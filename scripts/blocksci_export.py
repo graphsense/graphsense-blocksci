@@ -2,7 +2,7 @@
 
 from abc import ABC
 from argparse import ArgumentParser
-from datetime import datetime
+from datetime import datetime as dt
 from functools import wraps
 from itertools import islice
 from multiprocessing import Pool, Value
@@ -35,12 +35,24 @@ address_type = {
 def timing(f):
     @wraps(f)
     def wrap(*args, **kw):
-        t1 = datetime.now()
+        t1 = dt.now()
         result = f(*args, **kw)
-        t2 = datetime.now()
+        t2 = dt.now()
         print('\n... %s\n' % str(t2 - t1))
         return result
     return wrap
+
+
+def query_most_recent_block(cluster, keyspace):
+    '''Fetch most recent entry from blocks table.'''
+
+    session = cluster.connect(keyspace)
+    session.default_timout = 2e4
+    cql_str = f'''SELECT MAX(height) AS max_height FROM {keyspace}.block;'''
+
+    result = session.execute(cql_str)
+    max_height = result.one().max_height
+    return max_height
 
 
 class QueryManager(ABC):
@@ -307,13 +319,16 @@ def insert_summary_stats(cluster, keyspace, last_block):
     session.execute(cql_str, (keyspace, timestamp, total_blocks, total_txs))
 
 
-def main():
+def create_parser():
     parser = ArgumentParser(description='Export dumped BlockSci data '
                                         'to Apache Cassandra',
                             epilog='GraphSense - http://graphsense.info')
     parser.add_argument('-c', '--config', dest='blocksci_config',
                         required=True,
                         help='BlockSci configuration file')
+    parser.add_argument('--continue', action='store_true',
+                        dest='continue_ingest',
+                        help='continue ingest from last block/tx id')
     parser.add_argument('-d', '--db_nodes', dest='db_nodes', nargs='+',
                         default='localhost', metavar='DB_NODE',
                         help='list of Cassandra nodes; default "localhost")')
@@ -350,29 +365,61 @@ def main():
     parser.add_argument('--statistics', action='store_true',
                         help='ingest only into the summary statistics table')
 
+    return parser
+
+
+def main():
+
+    parser = create_parser()
     args = parser.parse_args()
 
     chain = blocksci.Blockchain(args.blocksci_config)
-    print('Last parsed block: %d (%s)' %
-          (chain[-1].height, datetime.strftime(chain[-1].time, '%F %T')))
-    block_range = chain[args.start_index:args.end_index]
+
+    last_parsed_block = chain[-1]
+    print('-' * 58)
+    print('Last parsed block:   %10d (%s UTC)' %
+          (last_parsed_block.height,
+           dt.strftime(last_parsed_block.time, '%F %T')))
+
+    cluster = Cluster(args.db_nodes)
+    if args.continue_ingest:
+        most_recent_block = query_most_recent_block(cluster, args.keyspace)
+        if most_recent_block is None:
+            next_block = 0
+            print('Last ingested block: None')
+        else:
+            next_block = most_recent_block + 1
+            last_ingested_block = chain[most_recent_block]
+            print('Last ingested block: %10d (%s UTC)' %
+                  (last_ingested_block.height,
+                   dt.strftime(last_ingested_block.time, '%F %T')))
+        args.start_index = next_block
+    print('-' * 58)
+    cluster.shutdown()
+
+    block_range = chain[args.start_index:(args.end_index+1)]
 
     if args.start_index >= len(chain):
         print('Error: --start_index argument must be smaller than %d' %
               len(chain))
         raise SystemExit
 
+    if args.start_index > args.end_index:
+        print('Error: --start_index argument must be smaller than '
+              '--end_index argument')
+        raise SystemExit
+
     if not args.num_chunks:
         args.num_chunks = args.num_proc
 
     if args.prev_day:
-        tstamp_today = time.mktime(datetime.today().date().timetuple())
-        block_tstamps = block_range.time.astype(datetime)/1e9
+        tstamp_today = time.mktime(dt.today().date().timetuple())
+        block_tstamps = block_range.time.astype(dt)/1e9
         v = np.where(block_tstamps < tstamp_today)[0]
         if len(v):
             last_index = np.max(v)
             last_height = block_range[last_index].height
-            if last_height + 1 != chain[args.end_index].height:
+            if last_height != chain[args.end_index].height:
                 print('Discarding blocks %d ... %d' %
                       (last_height + 1, chain[args.end_index].height))
                 block_range = chain[args.start_index:(last_height + 1)]
@@ -386,10 +433,10 @@ def main():
                       block_range[-1].txes[-1].index + 1)
     num_tx = tx_index_range[1] - tx_index_range[0] + 1
 
-    cluster = Cluster(args.db_nodes)
-
     all_tables = not (args.blocks or args.block_tx or
                       args.tx or args.statistics)
+
+    cluster = Cluster(args.db_nodes)
 
     # transactions
     if all_tables or args.tx:

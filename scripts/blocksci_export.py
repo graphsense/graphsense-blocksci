@@ -335,6 +335,8 @@ def create_parser():
     parser.add_argument('-d', '--db_nodes', dest='db_nodes', nargs='+',
                         default='localhost', metavar='DB_NODE',
                         help='list of Cassandra nodes; default "localhost")')
+    parser.add_argument('-i', '--info', action='store_true',
+                        help='display block information and exit')
     parser.add_argument('-k', '--keyspace', dest='keyspace',
                         required=True,
                         help='Cassandra keyspace')
@@ -399,6 +401,9 @@ def main():
         args.start_index = next_block
     print('-' * 58)
     cluster.shutdown()
+
+    if args.info:
+        raise SystemExit(0)
 
     block_range = chain[args.start_index:(args.end_index+1)]
 

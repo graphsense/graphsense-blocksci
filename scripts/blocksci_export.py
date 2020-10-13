@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
 from abc import ABC
 from argparse import ArgumentParser
@@ -350,7 +351,7 @@ def create_parser():
                         action='store_true',
                         help='only ingest blocks up to the previous day, '
                              'since currency exchange rates might not be '
-                             'available for the current day.')
+                             'available for the current day')
     parser.add_argument('--start_index', dest='start_index',
                         type=int, default=0,
                         help='start index of the blocks to export '
@@ -366,7 +367,7 @@ def create_parser():
                              '    "block_tx" (block transactions table), '
                              '    "tx" (transactions table), '
                              '    "stats" (summary statistics table); '
-                             'ingests all tables if not specified.')
+                             'ingests all tables if not specified')
     return parser
 
 

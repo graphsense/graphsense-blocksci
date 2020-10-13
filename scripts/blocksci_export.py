@@ -337,8 +337,7 @@ def create_parser():
                         help='list of Cassandra nodes; default "localhost")')
     parser.add_argument('-i', '--info', action='store_true',
                         help='display block information and exit')
-    parser.add_argument('-k', '--keyspace', dest='keyspace',
-                        required=True,
+    parser.add_argument('-k', '--keyspace', dest='keyspace', required=True,
                         help='Cassandra keyspace')
     parser.add_argument('--processes', dest='num_proc',
                         type=int, default=1,
@@ -358,19 +357,39 @@ def create_parser():
                              '(default 0)')
     parser.add_argument('--end_index', dest='end_index',
                         type=int, default=-1,
-                        help='only blocks with height smaller than '
-                             'this value are included; a negative index '
+                        help='only blocks with height smaller than or equal '
+                             'to this value are included; a negative index '
                              'counts back from the end (default -1)')
-    parser.add_argument('--blocks', action='store_true',
-                        help='ingest only into the blocks table')
-    parser.add_argument('--block_tx', action='store_true',
-                        help='ingest only into the block_transactions table')
-    parser.add_argument('--tx', action='store_true',
-                        help='ingest only into the transactions table')
-    parser.add_argument('--statistics', action='store_true',
-                        help='ingest only into the summary statistics table')
-
+    parser.add_argument('-t', '--tables', nargs='*', metavar='TABLE',
+                        help='list of tables to ingest, possible values:'
+                             '    "block" (block table), '
+                             '    "block_tx" (block transactions table), '
+                             '    "tx" (transactions table), '
+                             '    "stats" (summary statistics table); '
+                             'ingests all tables if not specified.')
     return parser
+
+
+def check_tables_arg(tables, table_list=['tx', 'block_tx', 'block', 'stats']):
+    all_tables = tables is None
+    table_list_intersect = table_list
+    if not all_tables:
+        set_diff = set(tables) - set(table_list)
+        if len(tables) == 0:
+            print('No tables specified in --tables/-t argument.')
+            raise SystemExit(1)
+        if set_diff:
+            print("Unknown table(s) in --tables/-t argument:")
+            for elem in set_diff:
+                print(f'    {elem}')
+            raise SystemExit(1)
+        table_list_intersect = set(table_list).intersection(set(tables))
+
+    print('Ingesting to tables:')
+    for elem in table_list_intersect:
+        print(f'    {elem}')
+
+    return list(table_list_intersect)
 
 
 def main():
@@ -441,13 +460,13 @@ def main():
                       block_range[-1].txes[-1].index + 1)
     num_tx = tx_index_range[1] - tx_index_range[0] + 1
 
-    all_tables = not (args.blocks or args.block_tx or
-                      args.tx or args.statistics)
+    tables = check_tables_arg(args.tables)
+    print('-' * 58)
 
     cluster = Cluster(args.db_nodes)
 
     # transactions
-    if all_tables or args.tx:
+    if 'tx' in tables:
 
         print('Transactions ({:,.0f} tx)'.format(num_tx))
         print('tx index: {:,.0f} -- {:,.0f}'.format(*tx_index_range))
@@ -462,7 +481,7 @@ def main():
         qm.close_pool()
 
     # block transactions
-    if all_tables or args.block_tx:
+    if 'block_tx' in tables:
         print('Block transactions ({:,.0f} blocks)'.format(num_blocks))
         print('block index: {:,.0f} -- {:,.0f}'.format(*block_index_range))
         cql_str = '''INSERT INTO block_transactions
@@ -473,7 +492,7 @@ def main():
         qm.close_pool()
 
     # blocks
-    if all_tables or args.blocks:
+    if 'block' in tables:
         print('Blocks ({:,.0f} blocks)'.format(num_blocks))
         print('block index: {:,.0f} -- {:,.0f}'.format(*block_index_range))
         cql_str = '''INSERT INTO block
@@ -482,7 +501,8 @@ def main():
         generator = (block_summary(x) for x in block_range)
         insert(cluster, args.keyspace, cql_str, generator, 100)
 
-    if all_tables or args.statistics:
+    # summary statistics
+    if 'stats' in tables:
         insert_summary_stats(cluster,
                              args.keyspace,
                              chain[block_range[-1].height])

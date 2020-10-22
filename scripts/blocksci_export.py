@@ -425,17 +425,26 @@ def main():
     if args.info:
         raise SystemExit(0)
 
-    block_range = chain[args.start_index:(args.end_index+1)]
+    # handle negative end index
+    if args.end_index < 0:
+        end_index = len(chain) + args.end_index + 1
+    else:
+        end_index = args.end_index + 1
+    block_range = chain[args.start_index:end_index]
+
+    if args.start_index >= len(chain) and args.continue_ingest:
+        print('No blocks/transactions to ingest')
+        raise SystemExit(0)
 
     if args.start_index >= len(chain):
         print('Error: --start_index argument must be smaller than %d' %
               len(chain))
-        raise SystemExit
+        raise SystemExit(1)
 
-    if args.start_index > args.end_index:
+    if args.start_index >= end_index:
         print('Error: --start_index argument must be smaller than '
               '--end_index argument')
-        raise SystemExit
+        raise SystemExit(1)
 
     if not args.num_chunks:
         args.num_chunks = args.num_proc
@@ -470,7 +479,7 @@ def main():
     if 'tx' in tables:
 
         print('Transactions ({:,.0f} tx)'.format(num_tx))
-        print('tx index: {:,.0f} -- {:,.0f}'.format(*tx_index_range))
+        print('{:,.0f} <= tx_index < {:,.0f}'.format(*tx_index_range))
         cql_str = '''INSERT INTO transaction
                      (tx_prefix, tx_hash, tx_index, height,
                       timestamp, coinbase, total_input, total_output,
@@ -484,7 +493,7 @@ def main():
     # block transactions
     if 'block_tx' in tables:
         print('Block transactions ({:,.0f} blocks)'.format(num_blocks))
-        print('block index: {:,.0f} -- {:,.0f}'.format(*block_index_range))
+        print('{:,.0f} <= block index < {:,.0f}'.format(*block_index_range))
         cql_str = '''INSERT INTO block_transactions
                      (height, txs) VALUES (?, ?)'''
         qm = BlockTxQueryManager(cluster, args.keyspace, chain, cql_str,
@@ -495,7 +504,7 @@ def main():
     # blocks
     if 'block' in tables:
         print('Blocks ({:,.0f} blocks)'.format(num_blocks))
-        print('block index: {:,.0f} -- {:,.0f}'.format(*block_index_range))
+        print('{:,.0f} <= block index < {:,.0f}'.format(*block_index_range))
         cql_str = '''INSERT INTO block
                      (height, block_hash, timestamp, no_transactions)
                      VALUES (?, ?, ?, ?)'''

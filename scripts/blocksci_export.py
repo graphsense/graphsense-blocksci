@@ -190,7 +190,6 @@ class BlockTxQueryManager(QueryManager):
 def insert(cluster, keyspace, cql_stmt, generator, concurrency=100):
     session = cluster.connect(keyspace)
     session.default_timeout = 60
-    session.default_consistency_level = ConsistencyLevel.LOCAL_ONE
     prepared_stmt = session.prepare(cql_stmt)
 
     values = take(concurrency, generator)

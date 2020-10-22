@@ -408,7 +408,12 @@ def main():
 
     cluster = Cluster(args.db_nodes)
     if args.continue_ingest:
+        # get most recent block from database
         most_recent_block = query_most_recent_block(cluster, args.keyspace)
+        if most_recent_block is not None and \
+           most_recent_block > last_parsed_block.height:
+            print("Error: inconsistent number of parsed and ingested blocks")
+            raise SystemExit(1)
         if most_recent_block is None:
             next_block = 0
             print('Last ingested block: None')

@@ -78,12 +78,14 @@ RUN useradd -m -d /home/dockeruser -r -u 10000 dockeruser && \
   # install packages
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   ipython3 \
+  libboost-serialization1.71.0 \
   libjsoncpp1 \
   libjsonrpccpp-client0 \
   libssl1.1 \
   neovim \
   python3-bs4 \
   python3-crypto \
+  python3-lxml \
   python3-pandas \
   python3-pip \
   python3-psutil && \

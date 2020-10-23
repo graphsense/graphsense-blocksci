@@ -95,6 +95,7 @@ RUN useradd -m -d /home/dockeruser -r -u 10000 dockeruser && \
   chmod +x /docker-entrypoint.sh
 
 COPY scripts/*.py /usr/local/bin/
+COPY scripts/*.sh /usr/local/bin/
 COPY scripts/schema.cql /opt/graphsense/schema.cql
 
 USER dockeruser

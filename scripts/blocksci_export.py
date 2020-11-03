@@ -106,7 +106,6 @@ class TxQueryManager(QueryManager):
     def insert(cls, params):
 
         idx_start, idx_end = params
-        idx_diff = idx_end - idx_start
 
         param_list = []
 
@@ -139,7 +138,7 @@ class TxQueryManager(QueryManager):
             with cls.counter.get_lock():
                 cls.counter.value += curr_batch_size
             if (cls.counter.value % 1e4) == 0:
-                print(f'#tx {cls.counter.value:,.0f}/{idx_diff:,.0f}')
+                print(f'#tx {cls.counter.value:,.0f}')
 
 
 class BlockTxQueryManager(QueryManager):
@@ -150,7 +149,6 @@ class BlockTxQueryManager(QueryManager):
     def insert(cls, params):
 
         idx_start, idx_end = params
-        idx_diff = idx_end - idx_start
 
         param_list = []
 
@@ -188,7 +186,7 @@ class BlockTxQueryManager(QueryManager):
                 cls.counter.value += curr_batch_size
 
             if (cls.counter.value % 1e4) == 0:
-                print(f'#blocks {cls.counter.value:,.0f}/{idx_diff:,.0f}')
+                print(f'#blocks {cls.counter.value:,.0f}')
 
 
 @timing

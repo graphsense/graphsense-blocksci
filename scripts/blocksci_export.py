@@ -48,11 +48,16 @@ def query_most_recent_block(cluster, keyspace):
     '''Fetch most recent entry from blocks table.'''
 
     session = cluster.connect(keyspace)
-    session.default_timout = 2e4
-    cql_str = f'''SELECT MAX(height) AS max_height FROM {keyspace}.block;'''
+    cql_str = f'''SELECT height FROM {keyspace}.block;'''
+    result = session.execute(cql_str, timeout=None)
 
-    result = session.execute(cql_str)
-    max_height = result.one().max_height
+    max_height = -1
+    for row in result:
+        max_height = max(max_height, row[0])
+
+    if max_height == -1:
+        max_height = None
+
     return max_height
 
 

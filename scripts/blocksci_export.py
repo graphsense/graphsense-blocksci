@@ -418,7 +418,7 @@ def main():
             raise SystemExit(1)
         if most_recent_block is None:
             next_block = 0
-            print('Last ingested block: None')
+            print('Last ingested block:       None')
         else:
             next_block = most_recent_block + 1
             last_ingested_block = chain[most_recent_block]

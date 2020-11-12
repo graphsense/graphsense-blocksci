@@ -6,7 +6,7 @@ from argparse import ArgumentParser
 from cassandra.cluster import Cluster
 
 DEFAULT_TIMEOUT = 60
-KEYPACE_PLACEHOLDER = 'graphsense'
+KEYSPACE_PLACEHOLDER = 'graphsense'
 
 
 class StorageError(Exception):
@@ -61,7 +61,7 @@ class Cassandra:
             schema = fh.read()
 
         # replace keyspace name placeholder in CQL schema script
-        schema = schema.replace(KEYPACE_PLACEHOLDER, keyspace)
+        schema = schema.replace(KEYSPACE_PLACEHOLDER, keyspace)
 
         statements = schema.split(';')
         for stmt in statements:

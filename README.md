@@ -25,6 +25,12 @@ and test if it is running
 
     (1 rows)
 
+## Docker Compose setup
+
+An easy to use Docker Compose setup is provided by the
+[GraphSense Setup][graphsense-setup] component (see the README file and
+the `ingest` subdirectory).
+
 ## BlockSci Docker container
 
 Build docker image
@@ -70,7 +76,9 @@ or `./docker/attach.sh blocksci_btc`
 Create a BlockSci config file, e.g., for Bitcoin using the disk mode parser
 
 ```
-blocksci_parser /var/data/blocksci_data/btc.cfg generate-config bitcoin /var/data/blocksci_data --max-block '-6' --disk /var/data/block_data
+blocksci_parser /var/data/blocksci_data/btc.cfg generate-config bitcoin \
+                /var/data/blocksci_data --max-block '-6' \
+                --disk /var/data/block_data
 ```
 
 To run the BlockSci parser, use
@@ -189,5 +197,6 @@ GraphSense - http://graphsense.info
 ```
 
 [apache-cassandra]: http://cassandra.apache.org/download
+[graphsense-setup]: https://github.com/graphsense/graphsense-setup
 [coindesk]: https://www.coindesk.com/api
 [coinmarketcap]: https://coinmarketcap.com

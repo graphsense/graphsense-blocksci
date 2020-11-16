@@ -25,6 +25,12 @@ and test if it is running
 
     (1 rows)
 
+## Docker Compose setup
+
+An easy to use Docker Compose setup is provided by the
+[GraphSense Setup][graphsense-setup] component (see the README file and
+the `ingest` subdirectory).
+
 ## BlockSci Docker container
 
 Build docker image
@@ -70,7 +76,9 @@ or `./docker/attach.sh blocksci_btc`
 Create a BlockSci config file, e.g., for Bitcoin using the disk mode parser
 
 ```
-blocksci_parser /var/data/blocksci_data/btc.cfg generate-config bitcoin /var/data/blocksci_data --max-block '-6' --disk /var/data/block_data
+blocksci_parser /var/data/blocksci_data/btc.cfg generate-config bitcoin \
+                /var/data/blocksci_data --max-block '-6' \
+                --disk /var/data/block_data
 ```
 
 To run the BlockSci parser, use
@@ -89,11 +97,11 @@ and use the `blocksci_export.py` script:
 
 ```
 python3 blocksci_export.py -h
-usage: blocksci_export.py [-h] -c BLOCKSCI_CONFIG [-d DB_NODE [DB_NODE ...]]
-                          -k KEYSPACE [--processes NUM_PROC]
-                          [--chunks NUM_CHUNKS] [-p]
-                          [--start_index START_INDEX] [--end_index END_INDEX]
-                          [--blocks] [--block_tx] [--tx] [--statistics]
+usage: blocksci_export.py [-h] -c BLOCKSCI_CONFIG [--continue]
+                          [-d DB_NODE [DB_NODE ...]] [-i] -k KEYSPACE
+                          [--processes NUM_PROC] [--chunks NUM_CHUNKS] [-p]
+                          [--start_index START_INDEX]
+                          [--end_index END_INDEX] [-t [TABLE [TABLE ...]]]
 
 Export dumped BlockSci data to Apache Cassandra
 
@@ -101,26 +109,30 @@ optional arguments:
   -h, --help            show this help message and exit
   -c BLOCKSCI_CONFIG, --config BLOCKSCI_CONFIG
                         BlockSci configuration file
+  --continue            continue ingest from last block/tx id
   -d DB_NODE [DB_NODE ...], --db_nodes DB_NODE [DB_NODE ...]
                         list of Cassandra nodes; default "localhost")
+  -i, --info            display block information and exit
   -k KEYSPACE, --keyspace KEYSPACE
                         Cassandra keyspace
   --processes NUM_PROC  number of processes (default 1)
   --chunks NUM_CHUNKS   number of chunks to split tx/block range (default
                         `NUM_PROC`)
   -p, --previous_day    only ingest blocks up to the previous day, since
-                        currency exchange rates might not be available for the
-                        current day.
+                        currency exchange rates might not be available for
+                        the current day
   --start_index START_INDEX
                         start index of the blocks to export (default 0)
   --end_index END_INDEX
-                        only blocks with height smaller than this value are
-                        included; a negative index counts back from the end
-                        (default -1)
-  --blocks              ingest only into the blocks table
-  --block_tx            ingest only into the block_transactions table
-  --tx                  ingest only into the transactions table
-  --statistics          ingest only into the summary statistics table
+                        only blocks with height smaller than or equal to
+                        this value are included; a negative index counts
+                        back from the end (default -1)
+  -t [TABLE [TABLE ...]], --tables [TABLE [TABLE ...]]
+                        list of tables to ingest, possible values: "block"
+                        (block table), "block_tx" (block transactions
+                        table), "tx" (transactions table), "stats" (summary
+                        statistics table); ingests all tables if not
+                        specified
 
 GraphSense - http://graphsense.info
 ```
@@ -152,7 +164,6 @@ optional arguments:
   --end_date END        end date for fetching exchange rates
 
 GraphSense - http://graphsense.info
-
 ```
 
 For all other currencies the exchange rates are obtained through
@@ -161,8 +172,9 @@ For all other currencies the exchange rates are obtained through
 ```
 python3 scripts/ingest_rates_coinmarketcap.py -h
 usage: ingest_rates_coinmarketcap.py [-h] [-d DB_NODE [DB_NODE ...]] [-f] -k
-                                     KEYSPACE [-t TABLE] [--start_date START]
-                                     [--end_date END] -c CRYPTOCURRENCY
+                                     KEYSPACE [-t TABLE]
+                                     [--start_date START] [--end_date END]
+                                     -c CRYPTOCURRENCY
 
 Ingest exchange rates into Cassandra
 
@@ -185,5 +197,6 @@ GraphSense - http://graphsense.info
 ```
 
 [apache-cassandra]: http://cassandra.apache.org/download
+[graphsense-setup]: https://github.com/graphsense/graphsense-setup
 [coindesk]: https://www.coindesk.com/api
 [coinmarketcap]: https://coinmarketcap.com

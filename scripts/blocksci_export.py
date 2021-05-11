@@ -63,8 +63,6 @@ def query_most_recent_block(cluster, keyspace):
 
 class QueryManager(ABC):
 
-    # chosen to match the default in execute_concurrent_with_args
-    concurrency = 100
     counter = Value('d', 0)
 
     def __init__(self, cluster, keyspace, chain, cql_str,
@@ -73,6 +71,7 @@ class QueryManager(ABC):
             num_chunks = num_proc
         self.num_proc = num_proc
         self.num_chunks = num_chunks
+        self.concurrency = concurrency
         self.pool = Pool(processes=num_proc,
                          initializer=self._setup,
                          initargs=(cluster, chain, keyspace, cql_str))

@@ -109,6 +109,8 @@ optional arguments:
   -h, --help            show this help message and exit
   -c BLOCKSCI_CONFIG, --config BLOCKSCI_CONFIG
                         BlockSci configuration file
+  --concurrency CONCURRENCY
+                        Cassandra concurrency parameter (default 100)
   --continue            continue ingest from last block/tx id
   -d DB_NODE [DB_NODE ...], --db_nodes DB_NODE [DB_NODE ...]
                         list of Cassandra nodes; default "localhost")

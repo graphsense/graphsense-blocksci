@@ -331,6 +331,9 @@ def create_parser():
     parser.add_argument('-c', '--config', dest='blocksci_config',
                         required=True,
                         help='BlockSci configuration file')
+    parser.add_argument('--concurrency', dest='concurrency',
+                        type=int, default=100,
+                        help='Cassandra concurrency parameter (default 100)')
     parser.add_argument('--continue', action='store_true',
                         dest='continue_ingest',
                         help='continue ingest from last block/tx id')
@@ -369,9 +372,6 @@ def create_parser():
                              '    "tx" (transactions table), '
                              '    "stats" (summary statistics table); '
                              'ingests all tables if not specified')
-    parser.add_argument('--cassandra_concurrency', dest='concurrency',
-                        type=int, default=100,
-                        help='cassandra statements concurrency (default 100)')
     return parser
 
 
@@ -456,8 +456,7 @@ def main():
         raise SystemExit(1)
 
     if args.concurrency < 1:
-        print('Error: --cassandra-concurrency argument must be strictly'
-              ' positive.')
+        print('Error: --concurrency argument must be strictly positive.')
         raise SystemExit(1)
 
     if not args.num_chunks:

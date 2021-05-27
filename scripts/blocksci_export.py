@@ -71,14 +71,15 @@ class QueryManager(ABC):
             num_chunks = num_proc
         self.num_proc = num_proc
         self.num_chunks = num_chunks
-        self.concurrency = concurrency
+        init_args = (cluster, chain, keyspace, cql_str, concurrency)
         self.pool = Pool(processes=num_proc,
                          initializer=self._setup,
-                         initargs=(cluster, chain, keyspace, cql_str))
+                         initargs=init_args)
 
     @classmethod
-    def _setup(cls, cluster, chain, keyspace, cql_str):
+    def _setup(cls, cluster, chain, keyspace, cql_str, concurrency):
         cls.chain = chain
+        cls.concurrency = concurrency
         cls.session = cluster.connect()
         cls.session.default_timeout = 60
         cls.session.set_keyspace(keyspace)

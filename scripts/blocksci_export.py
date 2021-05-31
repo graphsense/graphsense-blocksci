@@ -63,23 +63,23 @@ def query_most_recent_block(cluster, keyspace):
 
 class QueryManager(ABC):
 
-    # chosen to match the default in execute_concurrent_with_args
-    concurrency = 100
     counter = Value('d', 0)
 
     def __init__(self, cluster, keyspace, chain, cql_str,
-                 num_proc=1, num_chunks=None):
+                 num_proc=1, num_chunks=None, concurrency=100):
         if not num_chunks:
             num_chunks = num_proc
         self.num_proc = num_proc
         self.num_chunks = num_chunks
+        init_args = (cluster, chain, keyspace, cql_str, concurrency)
         self.pool = Pool(processes=num_proc,
                          initializer=self._setup,
-                         initargs=(cluster, chain, keyspace, cql_str))
+                         initargs=init_args)
 
     @classmethod
-    def _setup(cls, cluster, chain, keyspace, cql_str):
+    def _setup(cls, cluster, chain, keyspace, cql_str, concurrency):
         cls.chain = chain
+        cls.concurrency = concurrency
         cls.session = cluster.connect()
         cls.session.default_timeout = 60
         cls.session.set_keyspace(keyspace)
@@ -332,6 +332,9 @@ def create_parser():
     parser.add_argument('-c', '--config', dest='blocksci_config',
                         required=True,
                         help='BlockSci configuration file')
+    parser.add_argument('--concurrency', dest='concurrency',
+                        type=int, default=100,
+                        help='Cassandra concurrency parameter (default 100)')
     parser.add_argument('--continue', action='store_true',
                         dest='continue_ingest',
                         help='continue ingest from last block/tx id')
@@ -453,6 +456,10 @@ def main():
               '--end_index argument')
         raise SystemExit(1)
 
+    if args.concurrency < 1:
+        print('Error: --concurrency argument must be strictly positive.')
+        raise SystemExit(1)
+
     if not args.num_chunks:
         args.num_chunks = args.num_proc
 
@@ -493,7 +500,7 @@ def main():
                       inputs, outputs, coinjoin)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
         qm = TxQueryManager(cluster, args.keyspace, chain, cql_str,
-                            args.num_proc, args.num_chunks)
+                            args.num_proc, args.num_chunks, args.concurrency)
         qm.execute(TxQueryManager.insert, tx_index_range)
         qm.close_pool()
 
@@ -504,7 +511,7 @@ def main():
         cql_str = '''INSERT INTO block_transactions
                      (height, txs) VALUES (?, ?)'''
         qm = BlockTxQueryManager(cluster, args.keyspace, chain, cql_str,
-                                 args.num_proc, args.num_chunks)
+                                 args.num_proc, args.num_chunks, args.concurrency)
         qm.execute(BlockTxQueryManager.insert, block_index_range)
         qm.close_pool()
 
@@ -516,7 +523,7 @@ def main():
                      (height, block_hash, timestamp, no_transactions)
                      VALUES (?, ?, ?, ?)'''
         generator = (block_summary(x) for x in block_range)
-        insert(cluster, args.keyspace, cql_str, generator, 100)
+        insert(cluster, args.keyspace, cql_str, generator, args.concurrency)
 
     # summary statistics
     if 'stats' in tables:

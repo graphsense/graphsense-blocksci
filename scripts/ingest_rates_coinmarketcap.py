@@ -6,7 +6,6 @@ from argparse import ArgumentParser
 from datetime import date, datetime, timedelta
 import json
 
-import bs4
 from cassandra.cluster import Cluster
 import pandas as pd
 import requests
@@ -31,58 +30,20 @@ def fetch_fx_rates(symbol_list):
     return rates_usd
 
 
-def historical_coin_url(slug, start, end):
-    start = start.replace('-', '')
-    end = end.replace('-', '')
-    return f'https://coinmarketcap.com/currencies/{slug}/historical-data/' + \
-           f'?start={start}&end={end}'
+def historical_coin_url(symbol, start, end):
+    return 'https://web-api.coinmarketcap.com/v1/cryptocurrency/ohlcv/' + \
+           f'historical?symbol={symbol}&convert=USD' + \
+           f'&time_start={start}&time_end={end}'
 
 
-def parse_all_response(resp):
-    '''Extract and parse summary table from CoinMarketCap'''
+def parse_historical_coin_response(response):
+    '''Parse historical exchange rates (JSON) from CoinMarketCap'''
 
-    soup = bs4.BeautifulSoup(resp.text, 'lxml')
-    soup_id = soup.find(id='__NEXT_DATA__')
+    json_data = json.loads(response.content)
+    json_data = [[elem['time_close'][:10], elem['quote']['USD']['close']]
+                 for elem in json_data['data']['quotes']]
 
-    json_data = json.loads(list(soup_id)[0])['props']['initialState']
-    json_data = json_data['cryptocurrency']['listingLatest']['data']
-    df = pd.DataFrame([{'symbol': elem['symbol'], 'slug':elem['slug']}
-                       for elem in json_data])
-    return df
-
-
-def parse_historical_coin_response(resp):
-    '''Extract and parse historical exchange rates (JSON) from CoinMarketCap'''
-
-    soup = bs4.BeautifulSoup(resp.text, 'lxml')
-    soup_id = soup.find(id='__NEXT_DATA__')
-
-    json_data = json.loads(list(soup_id)[0])['props']['initialState']
-    ohlcv_hist = json_data['cryptocurrency']['ohlcvHistorical']
-
-    key = list(ohlcv_hist)[0]
-    if ohlcv_hist[key]:
-        df = pd.DataFrame([elem['quote']['USD']
-                           for elem in ohlcv_hist[key]['quotes']])
-        df['date'] = pd.to_datetime(df.timestamp).dt.strftime('%Y-%m-%d')
-        df = df[['date', 'close']]
-        df.rename(columns={'close': 'USD'}, inplace=True)
-    else:
-        raise ExchangeRateParsingError
-    return df
-
-
-def lookup_slug(all_df, symbol):
-
-    if not symbol.isupper():
-        symbol = symbol.upper()
-    df_row = all_df.loc[all_df['symbol'] == symbol]
-    if df_row.empty:
-        return None
-    slug = df_row['slug'].tolist()
-    if len(slug) > 1:
-        raise ExchangeRateParsingError('Found more than one possible slugs')
-    return slug[0]
+    return pd.DataFrame(json_data, columns=['date', 'USD'])
 
 
 def query_required_currencies(session, keyspace, table):
@@ -129,15 +90,21 @@ def query_most_recent_date(session, keyspace, table):
 def fetch_crypto_exchange_rates(start, end, crypto_currency):
     '''Fetch cryptocurrency exchange rates from CoinMarketCap.'''
 
-    all_url = 'https://coinmarketcap.com/all/views/all/'
-    all_crypto_df = parse_all_response(requests.get(all_url))
-    slug = lookup_slug(all_crypto_df, crypto_currency)
-    crypto_url = historical_coin_url(slug, start, end)
-    print(f'Fetching {crypto_currency} exchange rates:\n{crypto_url}')
-    crypto_resp = requests.get(crypto_url)
-    crypto_df = parse_historical_coin_response(crypto_resp)
-    print(f'Last record: {crypto_df.date.tolist()[0]}')
-    return crypto_df
+    user_agent = ('Mozilla/5.0 (Macintosh; Intel Mac OS X 11_1) '
+                  'AppleWebKit/537.36 (KHTML, like Gecko) '
+                  'Chrome/87.0.4280.88 Safari/537.36')
+    headers = {'User-Agent': user_agent}
+
+    start_date = date.fromisoformat(start) + timedelta(days=-1)
+    end_date = date.fromisoformat(end)
+    url = historical_coin_url(crypto_currency, start_date, end_date)
+
+    print(f'Fetching {crypto_currency} exchange rates\n{url}')
+    response = requests.get(url, headers=headers)
+    df = parse_historical_coin_response(response)
+
+    print(f'Last record: {df.date.tolist()[-1]}')
+    return df
 
 
 def insert_exchange_rates(session, keyspace, table, exchange_rates_df):

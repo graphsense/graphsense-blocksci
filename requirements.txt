@@ -1,4 +1,4 @@
 cassandra-driver==3.25.0
 requests==2.25.1
 pandas==1.2.4
-numpy==1.20.2
+numpy==1.20.3

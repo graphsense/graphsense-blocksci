@@ -161,11 +161,7 @@ def main():
         raise SystemExit
 
     # query all required fiat currencies
-    try:
-        fiat_currencies = query_required_currencies(session, keyspace, table)
-        print(f'Target fiat currencies: {fiat_currencies}')
-    except ExchangeRateParsingError as err:
-        print(f'Error while querying all required fiat currencies: {err}')
+    print(f'Target fiat currencies: {args.fiat_currencies}')
 
     # fetch crypto currency exchange rates in USD
     crypto_df = fetch_crypto_exchange_rates(start, end, crypto_currency)

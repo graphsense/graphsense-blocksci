@@ -62,8 +62,9 @@ def fetch_exchange_rates(start, end, symbol_list):
     Returns
     -------
     DataFrame
-        Exchange rates in pandas DataFrame with columns 'date', 'USD', 'EUR' etc.
+        Exchange rates in pandas DataFrame with columns 'date', 'fiat_values'
     '''
+
     base_url = 'https://api.coindesk.com/v1/bpi/historical/close.json'
     param = '?currency={}&start={}&end={}'
 
@@ -87,7 +88,8 @@ def fetch_exchange_rates(start, end, symbol_list):
         .drop('date', axis=1) \
         .to_dict(orient='records')
 
-    [df_merged.drop(c, axis=1, inplace=True) for c in symbol_list if c in df_merged.keys()]
+    [df_merged.drop(c, axis=1, inplace=True)
+     for c in symbol_list if c in df_merged.keys()]
     return df_merged
 
 
@@ -131,7 +133,7 @@ def main():
                              'Cassandra and overwrite existing records')
     parser.add_argument('--fiat_currencies', dest='fiat_currencies', nargs='+',
                         default=['USD', 'EUR'], metavar='FIAT_CURRENCY',
-                        help='list of fiat fiat currencies;' +
+                        help='list of fiat fiat currencies;'
                              'default ["USD", "EUR"]')
     parser.add_argument('-k', '--keyspace', dest='keyspace',
                         required=True,

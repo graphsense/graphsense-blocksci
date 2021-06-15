@@ -47,7 +47,7 @@ def query_most_recent_date(session, keyspace, table):
     return largest.strftime('%Y-%m-%d')
 
 
-def fetch_exchange_rates(start, end):
+def fetch_exchange_rates(start, end, symbol_list):
     '''Fetch BTC exchange rates from CoinDesk.
 
     Parameters
@@ -56,34 +56,38 @@ def fetch_exchange_rates(start, end):
         Start date (ISO-format YYYY-mm-dd).
     end : str
         End date (ISO-format YYYY-mm-dd).
+    symbol_list: list[str]
+        ["EUR", "USD", "JPY" ...]
 
     Returns
     -------
     DataFrame
-        Exchange rates in pandas DataFrame with columns 'date', 'USD', 'EUR'.
+        Exchange rates in pandas DataFrame with columns 'date', 'USD', 'EUR' etc.
     '''
     base_url = 'https://api.coindesk.com/v1/bpi/historical/close.json'
     param = '?currency={}&start={}&end={}'
 
-    req_eur = requests.get(base_url + param.format('EUR', start, end))
-    json_eur = req_eur.json()
-    print(json_eur['disclaimer'])
-    df_eur = pd.DataFrame.from_records([json_eur['bpi']]).transpose()
-    df_eur.rename(columns={0: 'EUR'}, inplace=True)
+    df_merged = pd.DataFrame()
 
-    req_usd = requests.get(base_url + param.format('USD', start, end))
-    json_usd = req_usd.json()
-    print(json_usd['disclaimer'])
-    df_usd = pd.DataFrame.from_records([json_usd['bpi']]).transpose()
-    df_usd.rename(columns={0: 'USD'}, inplace=True)
+    for fiat in symbol_list:
+        new_request = requests.get(base_url + param.format(fiat, start, end))
+        try:
+            new_json = new_request.json()
+            print(new_json['disclaimer'])
+            new_df = pd.DataFrame.from_records([new_json['bpi']]).transpose()
+            new_df.rename(columns={0: fiat}, inplace=True)
 
-    df_merged = df_usd.join(df_eur).reset_index(level=0)
+            df_merged = new_df.join(df_merged)
+        except:
+            print(f"Unknown currency: {fiat}")
+
+    df_merged.reset_index(level=0, inplace=True)
     df_merged.rename(columns={'index': 'date'}, inplace=True)
     df_merged['fiat_values'] = df_merged \
         .drop('date', axis=1) \
         .to_dict(orient='records')
-    df_merged.drop(['EUR', 'USD'], axis=1, inplace=True)
 
+    [df_merged.drop(c, axis=1, inplace=True) for c in symbol_list if c in df_merged.keys()]
     return df_merged
 
 
@@ -99,7 +103,7 @@ def insert_exchange_rates(session, keyspace, table, exchange_rates):
     table
         Cassandra table.
     exchange_rates
-        pandas DataFrame with columns 'date', 'USD', 'EUR'.
+        pandas DataFrame with columns 'date', 'USD', 'EUR' etc.
     '''
 
     colnames = ','.join(exchange_rates.columns)
@@ -125,6 +129,10 @@ def main():
     parser.add_argument('-f', '--force', dest='force', action='store_true',
                         help='do not fetch most recent entries from '
                              'Cassandra and overwrite existing records')
+    parser.add_argument('--fiat_currencies', dest='fiat_currencies', nargs='+',
+                        default=['USD', 'EUR'], metavar='FIAT_CURRENCY',
+                        help='list of fiat fiat currencies;' +
+                             'default ["USD", "EUR"]')
     parser.add_argument('-k', '--keyspace', dest='keyspace',
                         required=True,
                         help='Cassandra keyspace')
@@ -169,8 +177,8 @@ def main():
         cluster.shutdown()
         raise SystemExit
 
-    # fetch cryptocurrency exchange rates in USD and EUR
-    exchange_rates_df = fetch_exchange_rates(start, end)
+    print(f'Target fiat currencies: {args.fiat_currencies}')
+    exchange_rates_df = fetch_exchange_rates(start, end, args.fiat_currencies)
 
     # insert exchange rates into Cassandra table
     print(f'Inserted rates for {len(exchange_rates_df)} days')

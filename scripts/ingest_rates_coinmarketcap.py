@@ -11,10 +11,6 @@ import pandas as pd
 import requests
 
 
-class ExchangeRateParsingError(Exception):
-    pass
-
-
 def fetch_fx_rates(symbol_list):
     '''Fetch and preprocess FX rates from ECB.'''
 
@@ -44,27 +40,6 @@ def parse_historical_coin_response(response):
                  for elem in json_data['data']['quotes']]
 
     return pd.DataFrame(json_data, columns=['date', 'USD'])
-
-
-def query_required_currencies(session, keyspace, table):
-    '''Fetch list of FIAT currencies from Cassandra table.'''
-
-    def pandas_factory(colnames, rows):
-        return pd.DataFrame(rows, columns=colnames)
-    session.row_factory = pandas_factory
-
-    query = f'''SELECT column_name FROM system_schema.columns
-                WHERE keyspace_name = '{keyspace}'
-                AND table_name = '{table}';'''
-    result = session.execute(query)
-    df = result._current_rows
-    currencies = [symbol.upper() for symbol in list(df['column_name'])]
-    if 'USD' not in currencies or 'DATE' not in currencies:
-        raise ExchangeRateParsingError(
-            'USD is mandatory and must be defined in the schema.')
-    currencies.remove('DATE')
-    currencies.remove('USD')
-    return currencies
 
 
 def query_most_recent_date(session, keyspace, table):
@@ -133,6 +108,10 @@ def main():
     parser.add_argument('-f', '--force', dest='force', action='store_true',
                         help='do not fetch most recent entries from '
                              'Cassandra and overwrite existing records')
+    parser.add_argument('--fiat_currencies', dest='fiat_currencies', nargs='+',
+                        default=['USD', 'EUR'], metavar='FIAT_CURRENCY',
+                        help='list of fiat currencies;' +
+                             'default ["USD", "EUR"]')
     parser.add_argument('-k', '--keyspace', dest='keyspace',
                         required=True,
                         help='Cassandra keyspace')
@@ -145,7 +124,7 @@ def main():
     parser.add_argument('--end_date', dest='end', type=str,
                         default=prev_date,
                         help='end date for fetching exchange rates')
-    parser.add_argument('-c', '--cryptocurrency', dest='cryptocurrency',
+    parser.add_argument('--cryptocurrency', dest='cryptocurrency',
                         type=str, default='BTC', required=True,
                         help='target cryptocurrency')
 
@@ -191,10 +170,10 @@ def main():
     # fetch crypto currency exchange rates in USD
     crypto_df = fetch_crypto_exchange_rates(start, end, crypto_currency)
 
-    fx_rates = fetch_fx_rates(fiat_currencies)
+    fx_rates = fetch_fx_rates(args.fiat_currencies)
     # query conversion rates and merge converted values in exchange rates
     exchange_rates = crypto_df
-    for fiat_currency in fiat_currencies:
+    for fiat_currency in set(args.fiat_currencies) - set(['USD']):
         fx_df = fx_rates[['date', fiat_currency]] \
                 .rename(columns={fiat_currency: 'fx_rate'})
         merged_df = crypto_df.merge(fx_df, how='left', on='date')
@@ -206,6 +185,13 @@ def main():
         exchange_rates = exchange_rates.merge(merged_df, on='date')
 
     # insert final exchange rates into Cassandra
+    if 'USD' not in args.fiat_currencies:
+        exchange_rates.drop('USD', axis=1, inplace=True)
+    exchange_rates['fiat_values'] = exchange_rates \
+        .drop('date', axis=1) \
+        .to_dict(orient='records')
+    exchange_rates.drop(args.fiat_currencies, axis=1, inplace=True)
+
     print(f'Inserted rates for {len(exchange_rates)} days')
     insert_exchange_rates(session, keyspace, table, exchange_rates)
 

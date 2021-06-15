@@ -63,7 +63,7 @@ def fetch_exchange_rates(start, end):
         Exchange rates in pandas DataFrame with columns 'date', 'USD', 'EUR'.
     '''
     base_url = 'https://api.coindesk.com/v1/bpi/historical/close.json'
-    param = '?index=USD&currency={}&start={}&end={}'
+    param = '?currency={}&start={}&end={}'
 
     req_eur = requests.get(base_url + param.format('EUR', start, end))
     json_eur = req_eur.json()
@@ -79,6 +79,11 @@ def fetch_exchange_rates(start, end):
 
     df_merged = df_usd.join(df_eur).reset_index(level=0)
     df_merged.rename(columns={'index': 'date'}, inplace=True)
+    df_merged['fiat_values'] = df_merged \
+        .drop('date', axis=1) \
+        .to_dict(orient='records')
+    df_merged.drop(['EUR', 'USD'], axis=1, inplace=True)
+
     return df_merged
 
 
@@ -144,7 +149,7 @@ def main():
     start = args.start
     end = args.end
 
-    print(f'*** Starting exchange rate ingest for BTC ***')
+    print('*** Starting exchange rate ingest for BTC ***')
 
     if datetime.fromisoformat(start) < datetime.fromisoformat(MIN_START):
         print(f'Warning: Exchange rates not available before {MIN_START}')
@@ -160,7 +165,7 @@ def main():
     print(f'End date: {end}')
 
     if datetime.fromisoformat(start) > datetime.fromisoformat(end):
-        print("Error: start date after end date.")
+        print('Error: start date after end date.')
         cluster.shutdown()
         raise SystemExit
 

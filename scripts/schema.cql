@@ -4,11 +4,13 @@ CREATE KEYSPACE IF NOT EXISTS graphsense
 USE graphsense;
 
 CREATE TABLE block (
-    height int PRIMARY KEY,
+    block_group int,
+    block_number int,
     block_hash blob,
     timestamp int,
-    no_transactions int
-);
+    no_transactions int,
+    PRIMARY KEY(block_group, block_number)
+) WITH CLUSTERING ORDER BY (block_number DESC);
 
 CREATE TYPE tx_input_output (
     address list<text>,
@@ -20,7 +22,7 @@ CREATE TABLE transaction (
     tx_prefix text,
     tx_hash blob,
     tx_index bigint,
-    height int,
+    block_number int,
     timestamp int,
     coinbase boolean,
     total_input bigint,
@@ -40,7 +42,7 @@ CREATE TYPE tx_summary (
 );
 
 CREATE TABLE block_transactions (
-    height int PRIMARY KEY,
+    block_number int PRIMARY KEY,
     txs list<FROZEN<tx_summary>>
 );
 

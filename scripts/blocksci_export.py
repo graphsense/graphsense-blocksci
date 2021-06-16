@@ -45,20 +45,22 @@ def timing(f):
 
 
 def query_most_recent_block(cluster, keyspace):
-    '''Fetch most recent entry from blocks table.'''
+    '''Fetch most recent entry from blocks table, else return None.'''
 
     session = cluster.connect(keyspace)
-    cql_str = f'''SELECT height FROM {keyspace}.block;'''
-    result = session.execute(cql_str, timeout=None)
+    result = session.execute(
+        f"SELECT block_group FROM {keyspace}.block PER PARTITION LIMIT 1")
+    groups = [row.block_group for row in result.current_rows]
 
-    max_height = -1
-    for row in result:
-        max_height = max(max_height, row[0])
+    if len(groups) == 0:
+        return None
 
-    if max_height == -1:
-        max_height = None
+    latest_block_group = max(groups)
+    # query relies on CLUSTERING ORDER BY (block_number DESC)
+    result = session.execute(f"SELECT block_number AS latest_block FROM {keyspace}.block WHERE block_group={latest_block_group} LIMIT 1")
+    latest_block = result.current_rows[0].latest_block
 
-    return max_height
+    return latest_block
 
 
 class QueryManager(ABC):
@@ -278,8 +280,9 @@ def addr_str(addr_obj):
     return res
 
 
-def block_summary(block):
-    return (block.height,
+def block_summary(block, bucket_size):
+    return (int(block.height // bucket_size),
+            block.height,
             bytearray.fromhex(str(block.hash)),
             block.timestamp,
             len(block))
@@ -329,6 +332,9 @@ def create_parser():
     parser = ArgumentParser(description='Export dumped BlockSci data '
                                         'to Apache Cassandra',
                             epilog='GraphSense - http://graphsense.info')
+    parser.add_argument('-b', '--bucket_size', dest='bucket_size',
+                        type=int, default=1e5,
+                        help='desired bucket size')
     parser.add_argument('-c', '--config', dest='blocksci_config',
                         required=True,
                         help='BlockSci configuration file')
@@ -495,7 +501,7 @@ def main():
         print('Transactions ({:,.0f} tx)'.format(num_tx))
         print('{:,.0f} <= tx_index < {:,.0f}'.format(*tx_index_range))
         cql_str = '''INSERT INTO transaction
-                     (tx_prefix, tx_hash, tx_index, height,
+                     (tx_prefix, tx_hash, tx_index, block_number,
                       timestamp, coinbase, total_input, total_output,
                       inputs, outputs, coinjoin)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
@@ -509,7 +515,7 @@ def main():
         print('Block transactions ({:,.0f} blocks)'.format(num_blocks))
         print('{:,.0f} <= block index < {:,.0f}'.format(*block_index_range))
         cql_str = '''INSERT INTO block_transactions
-                     (height, txs) VALUES (?, ?)'''
+                     (block_number, txs) VALUES (?, ?)'''
         qm = BlockTxQueryManager(cluster, args.keyspace, chain, cql_str,
                                  args.num_proc, args.num_chunks, args.concurrency)
         qm.execute(BlockTxQueryManager.insert, block_index_range)
@@ -520,9 +526,9 @@ def main():
         print('Blocks ({:,.0f} blocks)'.format(num_blocks))
         print('{:,.0f} <= block index < {:,.0f}'.format(*block_index_range))
         cql_str = '''INSERT INTO block
-                     (height, block_hash, timestamp, no_transactions)
-                     VALUES (?, ?, ?, ?)'''
-        generator = (block_summary(x) for x in block_range)
+                     (block_group, block_number, block_hash, timestamp, no_transactions)
+                     VALUES (?, ?, ?, ?, ?)'''
+        generator = (block_summary(x, args.bucket_size) for x in block_range)
         insert(cluster, args.keyspace, cql_str, generator, args.concurrency)
 
     # summary statistics

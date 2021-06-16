@@ -332,9 +332,9 @@ def create_parser():
     parser = ArgumentParser(description='Export dumped BlockSci data '
                                         'to Apache Cassandra',
                             epilog='GraphSense - http://graphsense.info')
-    parser.add_argument('-b', '--bucket_size', dest='bucket_size',
+    parser.add_argument('--block_bucket_size', dest='block_bucket_size',
                         type=int, default=1e5,
-                        help='desired bucket size')
+                        help='desired block bucket size')
     parser.add_argument('-c', '--config', dest='blocksci_config',
                         required=True,
                         help='BlockSci configuration file')
@@ -528,7 +528,7 @@ def main():
         cql_str = '''INSERT INTO block
                      (block_group, block_number, block_hash, timestamp, no_transactions)
                      VALUES (?, ?, ?, ?, ?)'''
-        generator = (block_summary(x, args.bucket_size) for x in block_range)
+        generator = (block_summary(x, args.block_bucket_size) for x in block_range)
         insert(cluster, args.keyspace, cql_str, generator, args.concurrency)
 
     # summary statistics
@@ -537,6 +537,10 @@ def main():
                              args.keyspace,
                              chain[block_range[-1].height])
 
+    # configuration details
+    session = cluster.connect(args.keyspace)
+    cql_str = '''INSERT INTO configuration (id, block_bucket_size) VALUES (%s, %s)'''
+    session.execute(cql_str, (args.keyspace, args.block_bucket_size))
     cluster.shutdown()
 
 

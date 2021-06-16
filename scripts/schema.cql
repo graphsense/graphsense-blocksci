@@ -57,3 +57,8 @@ CREATE TABLE summary_statistics (
     no_txs bigint,
     timestamp int
 );
+
+CREATE TABLE configuration (
+    id text PRIMARY KEY,
+    block_bucket_size int
+);

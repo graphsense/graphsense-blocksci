@@ -9,7 +9,6 @@ from itertools import islice
 from multiprocessing import Pool, Value
 import time
 
-
 from cassandra import ConsistencyLevel
 from cassandra.cluster import Cluster
 from cassandra.concurrent import execute_concurrent_with_args
@@ -49,7 +48,7 @@ def query_most_recent_block(cluster, keyspace):
 
     session = cluster.connect(keyspace)
     result = session.execute(
-        f"SELECT block_group FROM {keyspace}.block PER PARTITION LIMIT 1")
+        f'SELECT block_group FROM {keyspace}.block PER PARTITION LIMIT 1')
     groups = [row.block_group for row in result.current_rows]
 
     if len(groups) == 0:
@@ -57,8 +56,9 @@ def query_most_recent_block(cluster, keyspace):
 
     latest_block_group = max(groups)
     # query relies on CLUSTERING ORDER BY (block_number DESC)
-    result = session.execute(f"SELECT block_number AS latest_block FROM {keyspace}.block WHERE block_group={latest_block_group} LIMIT 1")
-    latest_block = result.current_rows[0].latest_block
+    result = session.execute(f'SELECT block_number FROM {keyspace}.block '
+                             f'WHERE block_group={latest_block_group} LIMIT 1')
+    latest_block = result.current_rows[0].block_number
 
     return latest_block
 
@@ -391,7 +391,7 @@ def check_tables_arg(tables, table_list=['tx', 'block_tx', 'block', 'stats']):
             print('No tables specified in --tables/-t argument.')
             raise SystemExit(1)
         if set_diff:
-            print("Unknown table(s) in --tables/-t argument:")
+            print('Unknown table(s) in --tables/-t argument:')
             for elem in set_diff:
                 print(f'    {elem}')
             raise SystemExit(1)
@@ -423,7 +423,7 @@ def main():
         most_recent_block = query_most_recent_block(cluster, args.keyspace)
         if most_recent_block is not None and \
            most_recent_block > last_parsed_block.height:
-            print("Error: inconsistent number of parsed and ingested blocks")
+            print('Error: inconsistent number of parsed and ingested blocks')
             raise SystemExit(1)
         if most_recent_block is None:
             next_block = 0

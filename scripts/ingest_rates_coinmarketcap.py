@@ -110,7 +110,7 @@ def main():
                              'Cassandra and overwrite existing records')
     parser.add_argument('--fiat_currencies', dest='fiat_currencies', nargs='+',
                         default=['USD', 'EUR'], metavar='FIAT_CURRENCY',
-                        help='list of fiat currencies;' +
+                        help='list of fiat currencies; '
                              'default ["USD", "EUR"]')
     parser.add_argument('-k', '--keyspace', dest='keyspace',
                         required=True,
@@ -137,7 +137,7 @@ def main():
 
     crypto_currency = args.cryptocurrency
 
-    # Default start and end date
+    # default start and end date
     start = args.start
     end = args.end
 

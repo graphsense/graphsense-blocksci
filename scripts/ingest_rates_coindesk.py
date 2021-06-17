@@ -133,7 +133,7 @@ def main():
                              'Cassandra and overwrite existing records')
     parser.add_argument('--fiat_currencies', dest='fiat_currencies', nargs='+',
                         default=['USD', 'EUR'], metavar='FIAT_CURRENCY',
-                        help='list of fiat fiat currencies;'
+                        help='list of fiat fiat currencies; '
                              'default ["USD", "EUR"]')
     parser.add_argument('-k', '--keyspace', dest='keyspace',
                         required=True,

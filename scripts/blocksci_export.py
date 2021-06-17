@@ -31,6 +31,8 @@ address_type = {
     'address_type.witness_unknown': 10
 }
 
+TX_HASH_PREFIX_LENGTH = 5
+
 
 def timing(f):
     @wraps(f)
@@ -303,7 +305,7 @@ def tx_io_summary(x):
 def tx_summary(tx):
     tx_inputs = [tx_io_summary(x) for x in tx.inputs]
     tx_outputs = [tx_io_summary(x) for x in tx.outputs]
-    return (str(tx.hash)[:5],
+    return (str(tx.hash)[:TX_HASH_PREFIX_LENGTH],
             bytearray.fromhex(str(tx.hash)),
             tx.index,
             tx.block_height,
@@ -539,9 +541,9 @@ def main():
 
     # configuration details
     session = cluster.connect(args.keyspace)
-    cql_str = '''INSERT INTO configuration (id, block_bucket_size)
-                 VALUES (?, ?)'''
-    session.execute(cql_str, (args.keyspace, args.block_bucket_size))
+    cql_str = '''INSERT INTO configuration (id, block_bucket_size, tx_prefix_length, currencies)
+                 VALUES (?, ?, ?)'''
+    session.execute(cql_str, (args.keyspace, args.block_bucket_size, TX_HASH_PREFIX_LENGTH))
     cluster.shutdown()
 
 

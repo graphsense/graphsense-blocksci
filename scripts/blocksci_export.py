@@ -539,7 +539,8 @@ def main():
 
     # configuration details
     session = cluster.connect(args.keyspace)
-    cql_str = '''INSERT INTO configuration (id, block_bucket_size) VALUES (%s, %s)'''
+    cql_str = '''INSERT INTO configuration (id, block_bucket_size)
+                 VALUES (?, ?)'''
     session.execute(cql_str, (args.keyspace, args.block_bucket_size))
     cluster.shutdown()
 

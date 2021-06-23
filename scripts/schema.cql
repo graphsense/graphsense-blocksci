@@ -19,9 +19,9 @@ CREATE TYPE tx_input_output (
 );
 
 CREATE TABLE transaction (
-    tx_prefix text,
+    tx_group int,
+    tx_id bigint,
     tx_hash blob,
-    tx_index bigint,
     block_number int,
     timestamp int,
     coinbase boolean,
@@ -30,6 +30,13 @@ CREATE TABLE transaction (
     inputs list<FROZEN<tx_input_output>>,
     outputs list<FROZEN<tx_input_output>>,
     coinjoin boolean,
+    PRIMARY KEY (tx_group, tx_id)
+);
+
+CREATE TABLE transaction_by_tx_prefix (
+    tx_prefix text,
+    tx_hash blob,
+    tx_ids list<bigint>,
     PRIMARY KEY (tx_prefix, tx_hash)
 );
 
@@ -61,5 +68,6 @@ CREATE TABLE summary_statistics (
 CREATE TABLE configuration (
     id text PRIMARY KEY,
     block_bucket_size int,
-    tx_prefix_length int
+    tx_prefix_length int,
+    tx_bucket_size int
 );

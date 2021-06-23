@@ -3,6 +3,7 @@
 
 from abc import ABC
 from argparse import ArgumentParser
+from collections import deque
 from datetime import datetime as dt
 from functools import wraps
 from itertools import islice
@@ -32,6 +33,7 @@ address_type = {
 }
 
 TX_HASH_PREFIX_LENGTH = 5
+TX_BUCKET_SIZE = 25_000
 
 
 def timing(f):
@@ -144,9 +146,44 @@ class TxQueryManager(QueryManager):
             if (cls.counter.value % 1e4) == 0:
                 print(f'#tx {cls.counter.value:,.0f}')
 
+    @classmethod
+    def insert_lookup_table(cls, params):
+        idx_start, idx_end = params
+
+        for index in range(idx_start, idx_end, cls.concurrency):
+            param_list = deque()
+
+            curr_batch_size = min(cls.concurrency, idx_end - index)
+            for i in range(0, curr_batch_size):
+                t_id = index + i
+                tx = blocksci.Tx(t_id, cls.chain)
+                param_list.append(tx_short_summary(tx.hash, t_id))
+
+            results = execute_concurrent_with_args(
+                session=cls.session,
+                statement=cls.prepared_stmt,
+                parameters=param_list,
+                concurrency=cls.concurrency)
+
+            for (i, (success, _)) in enumerate(results):
+                if not success:
+                    while True:
+                        try:
+                            t_id = index + i
+                            tx = blocksci.Tx(t_id, cls.chain)
+                            cls.session.execute(cls.prepared_stmt, tx_short_summary(tx.hash, t_id))
+                        except Exception as e:
+                            print(e)
+                            continue
+                        break
+
+            with cls.counter.get_lock():
+                cls.counter.value += curr_batch_size
+            if (cls.counter.value % 1e4) == 0:
+                print(f'#tx {cls.counter.value:,.0f}')
+
 
 class BlockTxQueryManager(QueryManager):
-
     counter = Value('d', 0)
 
     @classmethod
@@ -302,12 +339,12 @@ def tx_io_summary(x):
     return [addr_str(x.address), x.value, address_type[repr(x.address_type)]]
 
 
-def tx_summary(tx):
+def tx_summary(tx, bucket_size=TX_BUCKET_SIZE):
     tx_inputs = [tx_io_summary(x) for x in tx.inputs]
     tx_outputs = [tx_io_summary(x) for x in tx.outputs]
-    return (str(tx.hash)[:TX_HASH_PREFIX_LENGTH],
-            bytearray.fromhex(str(tx.hash)),
+    return (int(tx.index // bucket_size),
             tx.index,
+            bytearray.fromhex(str(tx.hash)),
             tx.block_height,
             int(tx.block_time.timestamp()),
             tx.is_coinbase,
@@ -316,6 +353,14 @@ def tx_summary(tx):
             list(tx_inputs),
             list(tx_outputs),
             blocksci.heuristics.is_coinjoin(tx))
+
+
+def tx_short_summary(tx_hash, t_id, prefix_length=TX_HASH_PREFIX_LENGTH):
+    return (
+        str(tx_hash)[:prefix_length],
+        bytearray.fromhex(str(tx_hash)),
+        [t_id] if isinstance(t_id, int) else t_id
+    )
 
 
 def insert_summary_stats(cluster, keyspace, last_block):
@@ -406,8 +451,20 @@ def check_tables_arg(tables, table_list=['tx', 'block_tx', 'block', 'stats']):
     return list(table_list_intersect)
 
 
-def main():
+def ingesting_btc(config_path):
+    # example path: /var/data/blocksci_data/btc.cfg
+    return config_path.split("/")[-1].lower().startswith("btc")
 
+
+def upsert_btc_duplicate_hashes(session, stmt):
+    """ 2 tx_hash duplicates exist, see https://bitcoin.stackexchange.com/a/88667/48795  """
+
+    for tx, ids in [("e3bf3d07d4b0375638d5f1db5255fe07ba2c4cb067cd81b84ee974b6585fb468", [142572, 142841]),
+                    ("d5d27987d2a3dfc724e359870c6644b40e497bdc0589a033220fe15429d88599", [142726, 142783])]:
+        session.execute(stmt, tx_short_summary(tx, ids))
+
+
+def main():
     parser = create_parser()
     args = parser.parse_args()
 
@@ -503,7 +560,7 @@ def main():
         print('Transactions ({:,.0f} tx)'.format(num_tx))
         print('{:,.0f} <= tx_index < {:,.0f}'.format(*tx_index_range))
         cql_str = '''INSERT INTO transaction
-                     (tx_prefix, tx_hash, tx_index, block_number,
+                     (tx_group, tx_id, tx_hash, block_number,
                       timestamp, coinbase, total_input, total_output,
                       inputs, outputs, coinjoin)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
@@ -511,6 +568,19 @@ def main():
                             args.num_proc, args.num_chunks, args.concurrency)
         qm.execute(TxQueryManager.insert, tx_index_range)
         qm.close_pool()
+
+        print('Transactions by tx_hash lookup table')
+        cql_str = '''INSERT INTO transaction_by_tx_prefix 
+                     (tx_prefix, tx_hash, tx_ids) 
+                     VALUES (?, ?, ?)'''
+        qm = TxQueryManager(cluster, args.keyspace, chain, cql_str,
+                            args.num_proc, args.num_chunks, args.concurrency)
+        qm.execute(TxQueryManager.insert_lookup_table, tx_index_range)
+        qm.close_pool()
+
+        # handle BTC duplicate tx_hash issue
+        if ingesting_btc(args.blocksci_config):
+            upsert_btc_duplicate_hashes(qm.session, qm.prepared_stmt)
 
     # block transactions
     if 'block_tx' in tables:
@@ -541,9 +611,9 @@ def main():
 
     # configuration details
     session = cluster.connect(args.keyspace)
-    cql_str = '''INSERT INTO configuration (id, block_bucket_size, tx_prefix_length, currencies)
-                 VALUES (?, ?, ?)'''
-    session.execute(cql_str, (args.keyspace, args.block_bucket_size, TX_HASH_PREFIX_LENGTH))
+    cql_str = '''INSERT INTO configuration (id, block_bucket_size, tx_prefix_length, tx_bucket_size)
+                 VALUES (?, ?, ?, ?)'''
+    session.execute(cql_str, (args.keyspace, args.block_bucket_size, TX_HASH_PREFIX_LENGTH, TX_BUCKET_SIZE))
     cluster.shutdown()
 
 

@@ -146,6 +146,10 @@ class TxQueryManager(QueryManager):
             if (cls.counter.value % 1e4) == 0:
                 print(f'#tx {cls.counter.value:,.0f}')
 
+
+class TxLookupQueryManager(QueryManager):
+    counter = Value('d', 0)
+
     @classmethod
     def insert_lookup_table(cls, params):
         idx_start, idx_end = params
@@ -382,6 +386,11 @@ def create_parser():
     parser.add_argument('--block_bucket_size', dest='block_bucket_size',
                         type=int, default=1e5,
                         help='desired block bucket size')
+    parser.add_argument("--bip30-fix", action='store_true',
+                        help='ensures that two duplicated tx_hashes are both '
+                             'inserted as well, '
+                             'see https://bitcoin.stackexchange.com/a/88667/48795 '
+                             'for the cause of this problem')
     parser.add_argument('-c', '--config', dest='blocksci_config',
                         required=True,
                         help='BlockSci configuration file')
@@ -451,14 +460,8 @@ def check_tables_arg(tables, table_list=['tx', 'block_tx', 'block', 'stats']):
     return list(table_list_intersect)
 
 
-def ingesting_btc(config_path):
-    # example path: /var/data/blocksci_data/btc.cfg
-    return config_path.split("/")[-1].lower().startswith("btc")
-
-
 def upsert_btc_duplicate_hashes(session, stmt):
     """ 2 tx_hash duplicates exist, see https://bitcoin.stackexchange.com/a/88667/48795  """
-
     for tx, ids in [("e3bf3d07d4b0375638d5f1db5255fe07ba2c4cb067cd81b84ee974b6585fb468", [142572, 142841]),
                     ("d5d27987d2a3dfc724e359870c6644b40e497bdc0589a033220fe15429d88599", [142726, 142783])]:
         session.execute(stmt, tx_short_summary(tx, ids))
@@ -573,14 +576,10 @@ def main():
         cql_str = '''INSERT INTO transaction_by_tx_prefix 
                      (tx_prefix, tx_hash, tx_ids) 
                      VALUES (?, ?, ?)'''
-        qm = TxQueryManager(cluster, args.keyspace, chain, cql_str,
+        qm = TxLookupQueryManager(cluster, args.keyspace, chain, cql_str,
                             args.num_proc, args.num_chunks, args.concurrency)
-        qm.execute(TxQueryManager.insert_lookup_table, tx_index_range)
+        qm.execute(TxLookupQueryManager.insert_lookup_table, tx_index_range)
         qm.close_pool()
-
-        # handle BTC duplicate tx_hash issue
-        if ingesting_btc(args.blocksci_config):
-            upsert_btc_duplicate_hashes(qm.session, qm.prepared_stmt)
 
     # block transactions
     if 'block_tx' in tables:
@@ -612,8 +611,16 @@ def main():
     # configuration details
     session = cluster.connect(args.keyspace)
     cql_str = '''INSERT INTO configuration (id, block_bucket_size, tx_prefix_length, tx_bucket_size)
-                 VALUES (?, ?, ?, ?)'''
-    session.execute(cql_str, (args.keyspace, args.block_bucket_size, TX_HASH_PREFIX_LENGTH, TX_BUCKET_SIZE))
+                 VALUES (%s, %s, %s, %s)'''
+    session.execute(cql_str, (args.keyspace, int(args.block_bucket_size), int(TX_HASH_PREFIX_LENGTH), int(TX_BUCKET_SIZE)))
+
+    if 'tx' in tables and args.bip30_fix:  # handle BTC duplicate tx_hash issue
+        print("Applying fix for BIP30 (duplicate tx hashes)")
+        session = cluster.connect(args.keyspace)
+        cql_str = '''INSERT INTO transaction_by_tx_prefix (tx_prefix, tx_hash, tx_ids) VALUES (?, ?, ?)'''
+        prep_stmt = session.prepare(cql_str)
+        upsert_btc_duplicate_hashes(session, prep_stmt)
+
     cluster.shutdown()
 
 

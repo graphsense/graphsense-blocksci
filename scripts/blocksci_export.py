@@ -361,11 +361,9 @@ def tx_summary(tx, bucket_size=TX_BUCKET_SIZE):
 
 
 def tx_short_summary(tx_hash, t_id, prefix_length=TX_HASH_PREFIX_LENGTH):
-    return (
-        str(tx_hash)[:prefix_length],
-        bytearray.fromhex(str(tx_hash)),
-        [t_id] if isinstance(t_id, int) else t_id
-    )
+    return (str(tx_hash)[:prefix_length],
+            bytearray.fromhex(str(tx_hash)),
+            [t_id] if isinstance(t_id, int) else t_id)
 
 
 def insert_summary_stats(cluster, keyspace, last_block):
@@ -564,7 +562,7 @@ def main():
         print('Transactions ({:,.0f} tx)'.format(num_tx))
         print('{:,.0f} <= tx_index < {:,.0f}'.format(*tx_index_range))
         cql_str = '''INSERT INTO transaction
-                     (tx_group, tx_id, tx_hash, block_id,
+                     (tx_id_group, tx_id, tx_hash, block_id,
                       timestamp, coinbase, total_input, total_output,
                       inputs, outputs, coinjoin)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''

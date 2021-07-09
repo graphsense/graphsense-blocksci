@@ -19,7 +19,7 @@ CREATE TYPE tx_input_output (
 );
 
 CREATE TABLE transaction (
-    tx_group int,
+    tx_id_group int,
     tx_id bigint,
     tx_hash blob,
     block_id int,
@@ -30,7 +30,7 @@ CREATE TABLE transaction (
     inputs list<FROZEN<tx_input_output>>,
     outputs list<FROZEN<tx_input_output>>,
     coinjoin boolean,
-    PRIMARY KEY (tx_group, tx_id)
+    PRIMARY KEY (tx_id_group, tx_id)
 );
 
 CREATE TABLE transaction_by_tx_prefix (

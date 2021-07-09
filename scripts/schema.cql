@@ -9,7 +9,7 @@ CREATE TABLE block (
     block_hash blob,
     timestamp int,
     no_transactions int,
-    PRIMARY KEY(block_group, block_id)
+    PRIMARY KEY(block_id_group, block_id)
 ) WITH CLUSTERING ORDER BY (block_id DESC);
 
 CREATE TYPE tx_input_output (

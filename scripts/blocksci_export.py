@@ -52,17 +52,17 @@ def query_most_recent_block(cluster, keyspace):
 
     session = cluster.connect(keyspace)
     result = session.execute(
-        f'SELECT block_group FROM {keyspace}.block PER PARTITION LIMIT 1')
-    groups = [row.block_group for row in result.current_rows]
+        f'SELECT block_id_group FROM {keyspace}.block PER PARTITION LIMIT 1')
+    groups = [row.block_id_group for row in result.current_rows]
 
     if len(groups) == 0:
         return None
 
-    latest_block_group = max(groups)
-    # query relies on CLUSTERING ORDER BY (block_number DESC)
-    result = session.execute(f'SELECT block_number FROM {keyspace}.block '
-                             f'WHERE block_group={latest_block_group} LIMIT 1')
-    latest_block = result.current_rows[0].block_number
+    max_block_group = max(groups)
+    # query relies on CLUSTERING ORDER BY (block_id DESC)
+    result = session.execute(f'SELECT block_id FROM {keyspace}.block '
+                             f'WHERE block_id_group={max_block_group} LIMIT 1')
+    latest_block = result.current_rows[0].block_id
 
     return latest_block
 
@@ -175,7 +175,8 @@ class TxLookupQueryManager(QueryManager):
                         try:
                             t_id = index + i
                             tx = blocksci.Tx(t_id, cls.chain)
-                            cls.session.execute(cls.prepared_stmt, tx_short_summary(tx.hash, t_id))
+                            cls.session.execute(cls.prepared_stmt,
+                                                tx_short_summary(tx.hash, t_id))
                         except Exception as e:
                             print(e)
                             continue
@@ -563,7 +564,7 @@ def main():
         print('Transactions ({:,.0f} tx)'.format(num_tx))
         print('{:,.0f} <= tx_index < {:,.0f}'.format(*tx_index_range))
         cql_str = '''INSERT INTO transaction
-                     (tx_group, tx_id, tx_hash, block_number,
+                     (tx_group, tx_id, tx_hash, block_id,
                       timestamp, coinbase, total_input, total_output,
                       inputs, outputs, coinjoin)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
@@ -573,8 +574,8 @@ def main():
         qm.close_pool()
 
         print('Transactions by tx_hash lookup table')
-        cql_str = '''INSERT INTO transaction_by_tx_prefix 
-                     (tx_prefix, tx_hash, tx_ids) 
+        cql_str = '''INSERT INTO transaction_by_tx_prefix
+                     (tx_prefix, tx_hash, tx_ids)
                      VALUES (?, ?, ?)'''
         qm = TxLookupQueryManager(cluster, args.keyspace, chain, cql_str,
                             args.num_proc, args.num_chunks, args.concurrency)
@@ -586,7 +587,7 @@ def main():
         print('Block transactions ({:,.0f} blocks)'.format(num_blocks))
         print('{:,.0f} <= block index < {:,.0f}'.format(*block_index_range))
         cql_str = '''INSERT INTO block_transactions
-                     (block_number, txs) VALUES (?, ?)'''
+                     (block_id, txs) VALUES (?, ?)'''
         qm = BlockTxQueryManager(cluster, args.keyspace, chain, cql_str,
                                  args.num_proc, args.num_chunks, args.concurrency)
         qm.execute(BlockTxQueryManager.insert, block_index_range)
@@ -597,9 +598,11 @@ def main():
         print('Blocks ({:,.0f} blocks)'.format(num_blocks))
         print('{:,.0f} <= block index < {:,.0f}'.format(*block_index_range))
         cql_str = '''INSERT INTO block
-                     (block_group, block_number, block_hash, timestamp, no_transactions)
+                     (block_id_group, block_id, block_hash,
+                      timestamp, no_transactions)
                      VALUES (?, ?, ?, ?, ?)'''
-        generator = (block_summary(x, args.block_bucket_size) for x in block_range)
+        generator = (block_summary(x, args.block_bucket_size)
+                     for x in block_range)
         insert(cluster, args.keyspace, cql_str, generator, args.concurrency)
 
     # summary statistics
@@ -610,9 +613,12 @@ def main():
 
     # configuration details
     session = cluster.connect(args.keyspace)
-    cql_str = '''INSERT INTO configuration (id, block_bucket_size, tx_prefix_length, tx_bucket_size)
+    cql_str = '''INSERT INTO configuration
+                 (id, block_bucket_size, tx_prefix_length, tx_bucket_size)
                  VALUES (%s, %s, %s, %s)'''
-    session.execute(cql_str, (args.keyspace, int(args.block_bucket_size), int(TX_HASH_PREFIX_LENGTH), int(TX_BUCKET_SIZE)))
+    session.execute(cql_str,
+                    (args.keyspace, int(args.block_bucket_size),
+                     int(TX_HASH_PREFIX_LENGTH), int(TX_BUCKET_SIZE)))
 
     if 'tx' in tables and args.bip30_fix:  # handle BTC duplicate tx_hash issue
         print("Applying fix for BIP30 (duplicate tx hashes)")

@@ -36,7 +36,7 @@ CREATE TABLE transaction (
 CREATE TABLE transaction_by_tx_prefix (
     tx_prefix text,
     tx_hash blob,
-    tx_ids list<bigint>,
+    tx_id bigint,
     PRIMARY KEY (tx_prefix, tx_hash)
 );
 

@@ -363,7 +363,7 @@ def tx_summary(tx, bucket_size=TX_BUCKET_SIZE):
 def tx_short_summary(tx_hash, t_id, prefix_length=TX_HASH_PREFIX_LENGTH):
     return (str(tx_hash)[:prefix_length],
             bytearray.fromhex(str(tx_hash)),
-            [t_id] if isinstance(t_id, int) else t_id)
+            t_id)
 
 
 def insert_summary_stats(cluster, keyspace, last_block):
@@ -461,9 +461,9 @@ def check_tables_arg(tables, table_list=['tx', 'block_tx', 'block', 'stats']):
 
 def upsert_btc_duplicate_hashes(session, stmt):
     """ 2 tx_hash duplicates exist, see https://bitcoin.stackexchange.com/a/88667/48795  """
-    for tx, ids in [("e3bf3d07d4b0375638d5f1db5255fe07ba2c4cb067cd81b84ee974b6585fb468", [142572, 142841]),
-                    ("d5d27987d2a3dfc724e359870c6644b40e497bdc0589a033220fe15429d88599", [142726, 142783])]:
-        session.execute(stmt, tx_short_summary(tx, ids))
+    for tx, tid in [("e3bf3d07d4b0375638d5f1db5255fe07ba2c4cb067cd81b84ee974b6585fb468", 142841),
+                    ("d5d27987d2a3dfc724e359870c6644b40e497bdc0589a033220fe15429d88599", 142783)]:
+        session.execute(stmt, tx_short_summary(tx, tid))
 
 
 def main():
@@ -621,7 +621,7 @@ def main():
     if 'tx' in tables and args.bip30_fix:  # handle BTC duplicate tx_hash issue
         print("Applying fix for BIP30 (duplicate tx hashes)")
         session = cluster.connect(args.keyspace)
-        cql_str = '''INSERT INTO transaction_by_tx_prefix (tx_prefix, tx_hash, tx_ids) VALUES (?, ?, ?)'''
+        cql_str = '''INSERT INTO transaction_by_tx_prefix (tx_prefix, tx_hash, tx_id) VALUES (?, ?, ?)'''
         prep_stmt = session.prepare(cql_str)
         upsert_btc_duplicate_hashes(session, prep_stmt)
 

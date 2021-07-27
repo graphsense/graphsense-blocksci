@@ -386,10 +386,8 @@ def create_parser():
                         type=int, default=1e5,
                         help='desired block bucket size')
     parser.add_argument("--bip30-fix", action='store_true',
-                        help='ensures that two duplicated tx_hashes are both '
-                             'inserted as well, '
-                             'see https://bitcoin.stackexchange.com/a/88667/48795 '
-                             'for the cause of this problem')
+                        help='ensure for duplicated tx hashes, that the most '
+                             'recent hash is ingested as specified in BIP30')
     parser.add_argument('-c', '--config', dest='blocksci_config',
                         required=True,
                         help='BlockSci configuration file')
@@ -460,7 +458,10 @@ def check_tables_arg(tables, table_list=['tx', 'block_tx', 'block', 'stats']):
 
 
 def upsert_btc_duplicate_hashes(session, stmt):
-    """ 2 tx_hash duplicates exist, see https://bitcoin.stackexchange.com/a/88667/48795  """
+    """Ensures for duplicated tx hashes that most recent transaction is
+       ingested, since BIP30 dictates that it is the newest version of these
+       transactions that is spendable.
+       See https://bitcoin.stackexchange.com/a/88667/48795"""
     for tx, tid in [("e3bf3d07d4b0375638d5f1db5255fe07ba2c4cb067cd81b84ee974b6585fb468", 142841),
                     ("d5d27987d2a3dfc724e359870c6644b40e497bdc0589a033220fe15429d88599", 142783)]:
         session.execute(stmt, tx_short_summary(tx, tid))
@@ -560,7 +561,7 @@ def main():
     if 'tx' in tables:
 
         print('Transactions ({:,.0f} tx)'.format(num_tx))
-        print('{:,.0f} <= tx_index < {:,.0f}'.format(*tx_index_range))
+        print('{:,.0f} <= tx id < {:,.0f}'.format(*tx_index_range))
         cql_str = '''INSERT INTO transaction
                      (tx_id_group, tx_id, tx_hash, block_id,
                       timestamp, coinbase, total_input, total_output,
@@ -621,7 +622,8 @@ def main():
     if 'tx' in tables and args.bip30_fix:  # handle BTC duplicate tx_hash issue
         print("Applying fix for BIP30 (duplicate tx hashes)")
         session = cluster.connect(args.keyspace)
-        cql_str = '''INSERT INTO transaction_by_tx_prefix (tx_prefix, tx_hash, tx_id) VALUES (?, ?, ?)'''
+        cql_str = '''INSERT INTO transaction_by_tx_prefix
+                     (tx_prefix, tx_hash, tx_id) VALUES (?, ?, ?)'''
         prep_stmt = session.prepare(cql_str)
         upsert_btc_duplicate_hashes(session, prep_stmt)
 

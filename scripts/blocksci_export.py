@@ -34,6 +34,7 @@ address_type = {
 
 TX_HASH_PREFIX_LENGTH = 5
 TX_BUCKET_SIZE = 25_000
+BLOCK_BUCKET_SIZE = 100_000
 
 
 def timing(f):
@@ -203,7 +204,9 @@ class BlockTxQueryManager(QueryManager):
             curr_batch_size = min(cls.concurrency, idx_end - index)
             for i in range(0, curr_batch_size):
                 block = cls.chain[index + i]
-                block_tx = [block.height, [tx_stats(x) for x in block.txes]]
+                block_tx = [int(block.height // BLOCK_BUCKET_SIZE),
+                            block.height,
+                            [tx_stats(x) for x in block.txes]]
                 param_list.append(block_tx)
 
             results = execute_concurrent_with_args(
@@ -332,8 +335,8 @@ def block_summary(block, bucket_size):
             len(block))
 
 
-def tx_stats(tx):
-    return (bytearray.fromhex(str(tx.hash)),
+def tx_stats(tx, bucket_size=TX_BUCKET_SIZE):
+    return (tx.index,
             len(tx.inputs),
             len(tx.outputs),
             tx.input_value,
@@ -382,8 +385,8 @@ def create_parser():
     parser = ArgumentParser(description='Export dumped BlockSci data '
                                         'to Apache Cassandra',
                             epilog='GraphSense - http://graphsense.info')
-    parser.add_argument('--block_bucket_size', dest='block_bucket_size',
-                        type=int, default=1e5,
+    parser.add_argument('--tx_bucket_size', dest='tx_bucket_size',
+                        type=int, default=25000,
                         help='desired block bucket size')
     parser.add_argument("--bip30-fix", action='store_true',
                         help='ensure for duplicated tx hashes, that the most '
@@ -574,10 +577,11 @@ def main():
 
         print('Transactions by tx_hash lookup table')
         cql_str = '''INSERT INTO transaction_by_tx_prefix
-                     (tx_prefix, tx_hash, tx_ids)
+                     (tx_prefix, tx_hash, tx_id)
                      VALUES (?, ?, ?)'''
         qm = TxLookupQueryManager(cluster, args.keyspace, chain, cql_str,
-                            args.num_proc, args.num_chunks, args.concurrency)
+                                  args.num_proc, args.num_chunks,
+                                  args.concurrency)
         qm.execute(TxLookupQueryManager.insert_lookup_table, tx_index_range)
         qm.close_pool()
 
@@ -586,9 +590,10 @@ def main():
         print('Block transactions ({:,.0f} blocks)'.format(num_blocks))
         print('{:,.0f} <= block index < {:,.0f}'.format(*block_index_range))
         cql_str = '''INSERT INTO block_transactions
-                     (block_id, txs) VALUES (?, ?)'''
+                     (block_id_group, block_id, txs) VALUES (?, ?, ?)'''
         qm = BlockTxQueryManager(cluster, args.keyspace, chain, cql_str,
-                                 args.num_proc, args.num_chunks, args.concurrency)
+                                 args.num_proc, args.num_chunks,
+                                 args.concurrency)
         qm.execute(BlockTxQueryManager.insert, block_index_range)
         qm.close_pool()
 
@@ -600,7 +605,7 @@ def main():
                      (block_id_group, block_id, block_hash,
                       timestamp, no_transactions)
                      VALUES (?, ?, ?, ?, ?)'''
-        generator = (block_summary(x, args.block_bucket_size)
+        generator = (block_summary(x, int(BLOCK_BUCKET_SIZE))
                      for x in block_range)
         insert(cluster, args.keyspace, cql_str, generator, args.concurrency)
 
@@ -616,8 +621,10 @@ def main():
                  (id, block_bucket_size, tx_prefix_length, tx_bucket_size)
                  VALUES (%s, %s, %s, %s)'''
     session.execute(cql_str,
-                    (args.keyspace, int(args.block_bucket_size),
-                     int(TX_HASH_PREFIX_LENGTH), int(TX_BUCKET_SIZE)))
+                    (args.keyspace,
+                     int(BLOCK_BUCKET_SIZE),
+                     int(TX_HASH_PREFIX_LENGTH),
+                     int(TX_BUCKET_SIZE)))
 
     if 'tx' in tables and args.bip30_fix:  # handle BTC duplicate tx_hash issue
         print("Applying fix for BIP30 (duplicate tx hashes)")

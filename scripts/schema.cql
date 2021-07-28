@@ -41,7 +41,7 @@ CREATE TABLE transaction_by_tx_prefix (
 );
 
 CREATE TYPE tx_summary (
-    tx_hash blob,
+    tx_id bigint,
     no_inputs int,
     no_outputs int,
     total_input bigint,
@@ -49,9 +49,11 @@ CREATE TYPE tx_summary (
 );
 
 CREATE TABLE block_transactions (
-    block_id int PRIMARY KEY,
-    txs list<FROZEN<tx_summary>>
-);
+    block_id_group int,
+    block_id int,
+    txs list<FROZEN<tx_summary>>,
+    PRIMARY KEY (block_id_group, block_id)
+) WITH CLUSTERING ORDER BY (block_id DESC);
 
 CREATE TABLE exchange_rates (
     date text PRIMARY KEY,

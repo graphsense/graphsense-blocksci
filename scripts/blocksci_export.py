@@ -385,9 +385,6 @@ def create_parser():
     parser = ArgumentParser(description='Export dumped BlockSci data '
                                         'to Apache Cassandra',
                             epilog='GraphSense - http://graphsense.info')
-    parser.add_argument('--tx_bucket_size', dest='tx_bucket_size',
-                        type=int, default=25000,
-                        help='desired block bucket size')
     parser.add_argument("--bip30-fix", action='store_true',
                         help='ensure for duplicated tx hashes, that the most '
                              'recent hash is ingested as specified in BIP30')

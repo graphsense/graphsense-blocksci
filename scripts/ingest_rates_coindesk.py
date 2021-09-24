@@ -4,13 +4,20 @@
 
 from argparse import ArgumentParser
 from datetime import date, datetime, timedelta
+from typing import List, Optional
 
-from cassandra.cluster import Cluster
+from cassandra.cluster import Cluster, Session
 import pandas as pd
 import requests
+from simplejson.errors import JSONDecodeError
 
 
-def query_most_recent_date(session, keyspace, table):
+MIN_START = "2010-10-17"  # no CoinDesk exchange rates available before
+
+
+def query_most_recent_date(
+    session: Session, keyspace: str, table: str
+) -> Optional[str]:
     """Fetch most recent entry from exchange rates table.
 
     Parameters
@@ -24,8 +31,8 @@ def query_most_recent_date(session, keyspace, table):
 
     Returns
     -------
-    DataFrame
-        Exchange rates in pandas DataFrame with columns 'date', 'USD', 'EUR'.
+    str
+        Most recent date in Exchange rates in Cassadra table.
     """
 
     def pandas_factory(colnames, rows):
@@ -37,24 +44,29 @@ def query_most_recent_date(session, keyspace, table):
     query = f"""SELECT date FROM {keyspace}.{table};"""
 
     result = session.execute(query)
-    exchange_rates = result._current_rows
-    if exchange_rates.empty:
-        return None
-    exchange_rates["date"] = exchange_rates["date"].astype("datetime64")
+    rates = result._current_rows
+    rates["date"] = rates["date"].astype("datetime64")
 
-    largest = exchange_rates.nlargest(1, "date").iloc[0]["date"]
+    if rates.empty:
+        max_date = None
+    else:
+        rates["date"] = rates["date"].astype("datetime64")
+        max_date = (
+            rates.nlargest(1, "date").iloc[0]["date"].strftime("%Y-%m-%d")
+        )
+    return max_date
 
-    return largest.strftime("%Y-%m-%d")
 
-
-def fetch_exchange_rates(start, end, symbol_list):
+def fetch_exchange_rates(
+    start_date: str, end_date: str, symbol_list: List
+) -> pd.DataFrame:
     """Fetch BTC exchange rates from CoinDesk.
 
     Parameters
     ----------
-    start : str
+    start_date : str
         Start date (ISO-format YYYY-mm-dd).
-    end : str
+    end_date : str
         End date (ISO-format YYYY-mm-dd).
     symbol_list: list[str]
         ["EUR", "USD", "JPY" ...]
@@ -71,16 +83,18 @@ def fetch_exchange_rates(start, end, symbol_list):
     df_merged = pd.DataFrame()
 
     for fiat in symbol_list:
-        new_request = requests.get(base_url + param.format(fiat, start, end))
+        request = requests.get(
+            base_url + param.format(fiat, start_date, end_date)
+        )
         try:
-            new_json = new_request.json()
-            print(new_json["disclaimer"])
-            new_df = pd.DataFrame.from_records([new_json["bpi"]]).transpose()
-            new_df.rename(columns={0: fiat}, inplace=True)
-
-            df_merged = new_df.join(df_merged)
-        except:
+            json = request.json()
+            print(json["disclaimer"])
+            rates = pd.DataFrame.from_records([json["bpi"]]).transpose()
+            rates.rename(columns={0: fiat}, inplace=True)
+            df_merged = rates.join(df_merged)
+        except JSONDecodeError as symbol_not_found:
             print(f"Unknown currency: {fiat}")
+            raise SystemExit(1) from symbol_not_found
 
     df_merged.reset_index(level=0, inplace=True)
     df_merged.rename(columns={"index": "date"}, inplace=True)
@@ -96,7 +110,9 @@ def fetch_exchange_rates(start, end, symbol_list):
     return df_merged
 
 
-def insert_exchange_rates(session, keyspace, table, exchange_rates):
+def insert_exchange_rates(
+    session: Session, keyspace: str, table: str, exchange_rates: pd.DataFrame
+) -> None:
     """Insert exchange rates into Cassandra table.
 
     Parameters
@@ -114,16 +130,15 @@ def insert_exchange_rates(session, keyspace, table, exchange_rates):
     colnames = ",".join(exchange_rates.columns)
     values = ",".join(["?" for i in range(len(exchange_rates.columns))])
     query = f"""INSERT INTO {keyspace}.{table}({colnames}) VALUES ({values})"""
-    prepared = session.prepare(query)
+    prepared_stmt = session.prepare(query)
 
     for _, row in exchange_rates.iterrows():
-        session.execute(prepared, row)
+        session.execute(prepared_stmt, row)
 
 
-def main():
-    """Main function."""
+def create_parser() -> ArgumentParser:
+    """Create command-line argument parser."""
 
-    MIN_START = "2010-10-17"  # no CoinDesk exchange rates available before
     prev_date = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
 
     parser = ArgumentParser(
@@ -132,7 +147,7 @@ def main():
     )
     parser.add_argument(
         "-d",
-        "--db_nodes",
+        "--db-nodes",
         dest="db_nodes",
         nargs="+",
         default=["localhost"],
@@ -144,11 +159,11 @@ def main():
         "--force",
         dest="force",
         action="store_true",
-        help="do not fetch most recent entries from "
-        "Cassandra and overwrite existing records",
+        help="don't continue from last found Cassandra record "
+        "and force overwrite of existing rows",
     )
     parser.add_argument(
-        "--fiat_currencies",
+        "--fiat-currencies",
         dest="fiat_currencies",
         nargs="+",
         default=["USD", "EUR"],
@@ -170,57 +185,64 @@ def main():
         help="name of the target exchange rate table",
     )
     parser.add_argument(
-        "--start_date",
-        dest="start",
+        "--start-date",
+        dest="start_date",
         type=str,
         default=MIN_START,
         help="start date for fetching exchange rates",
     )
     parser.add_argument(
-        "--end_date",
-        dest="end",
+        "--end-date",
+        dest="end_date",
         type=str,
         default=prev_date,
         help="end date for fetching exchange rates",
     )
+    return parser
 
-    args = parser.parse_args()
+
+def main() -> None:
+    """Main function."""
+
+    args = create_parser().parse_args()
 
     cluster = Cluster(args.db_nodes)
-    keyspace = args.keyspace
-    table = args.table
-    session = cluster.connect(keyspace)
+    session = cluster.connect(args.keyspace)
 
     # default start and end date
-    start = args.start
-    end = args.end
+    start_date = args.start_date
+    end_date = args.end_date
 
-    print("*** Starting exchange rate ingest for BTC ***")
-
-    if datetime.fromisoformat(start) < datetime.fromisoformat(MIN_START):
+    if datetime.fromisoformat(start_date) < datetime.fromisoformat(MIN_START):
         print(f"Warning: Exchange rates not available before {MIN_START}")
-        start = MIN_START
+        start_date = MIN_START
 
     # query most recent data in 'exchange_rates' table
     if not args.force:
-        most_recent_date = query_most_recent_date(session, keyspace, table)
+        most_recent_date = query_most_recent_date(
+            session, args.keyspace, args.table
+        )
         if most_recent_date is not None:
-            start = most_recent_date
+            start_date = most_recent_date
 
-    print(f"Start date: {start}")
-    print(f"End date: {end}")
+    print("*** Starting exchange rate ingest for BTC ***")
+    print(f"Start date: {start_date}")
+    print(f"End date: {end_date}")
 
-    if datetime.fromisoformat(start) > datetime.fromisoformat(end):
+    if datetime.fromisoformat(start_date) > datetime.fromisoformat(end_date):
         print("Error: start date after end date.")
         cluster.shutdown()
-        raise SystemExit
+        raise SystemExit(1)
 
     print(f"Target fiat currencies: {args.fiat_currencies}")
-    exchange_rates_df = fetch_exchange_rates(start, end, args.fiat_currencies)
+    exchange_rates = fetch_exchange_rates(
+        start_date, end_date, args.fiat_currencies
+    )
 
     # insert exchange rates into Cassandra table
-    print(f"Inserted rates for {len(exchange_rates_df)} days")
-    insert_exchange_rates(session, keyspace, table, exchange_rates_df)
+    insert_exchange_rates(session, args.keyspace, args.table, exchange_rates)
+    print(f"Inserted rates for {len(exchange_rates)} days: ", end="")
+    print(f"{exchange_rates.iloc[0].date} - {exchange_rates.iloc[-1].date}")
 
     cluster.shutdown()
 

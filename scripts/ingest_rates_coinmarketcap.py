@@ -255,8 +255,6 @@ def main() -> None:
     ).to_dict(orient="records")
     exchange_rates.drop(args.fiat_currencies, axis=1, inplace=True)
 
-    print(f"{exchange_rates.iloc[0].date} - {exchange_rates.iloc[-1].date}")
-
     # insert exchange rates into Cassandra table
     insert_exchange_rates(session, args.keyspace, args.table, exchange_rates)
     print(f"Inserted rates for {len(exchange_rates)} days: ", end="")

@@ -3,12 +3,12 @@
 
 from abc import ABC
 from argparse import ArgumentParser
+from collections import deque
 from datetime import datetime as dt
 from functools import wraps
 from itertools import islice
 from multiprocessing import Pool, Value
 import time
-
 
 from cassandra import ConsistencyLevel
 from cassandra.cluster import Cluster
@@ -32,6 +32,10 @@ address_type = {
     'address_type.witness_unknown': 10
 }
 
+TX_HASH_PREFIX_LENGTH = 5
+TX_BUCKET_SIZE = 25_000
+BLOCK_BUCKET_SIZE = 100_000
+
 
 def timing(f):
     @wraps(f)
@@ -45,20 +49,23 @@ def timing(f):
 
 
 def query_most_recent_block(cluster, keyspace):
-    '''Fetch most recent entry from blocks table.'''
+    '''Fetch most recent entry from blocks table, else return None.'''
 
     session = cluster.connect(keyspace)
-    cql_str = f'''SELECT height FROM {keyspace}.block;'''
-    result = session.execute(cql_str, timeout=None)
+    result = session.execute(
+        f'SELECT block_id_group FROM {keyspace}.block PER PARTITION LIMIT 1')
+    groups = [row.block_id_group for row in result.current_rows]
 
-    max_height = -1
-    for row in result:
-        max_height = max(max_height, row[0])
+    if len(groups) == 0:
+        return None
 
-    if max_height == -1:
-        max_height = None
+    max_block_group = max(groups)
+    # query relies on CLUSTERING ORDER BY (block_id DESC)
+    result = session.execute(f'SELECT block_id FROM {keyspace}.block '
+                             f'WHERE block_id_group={max_block_group} LIMIT 1')
+    latest_block = result.current_rows[0].block_id
 
-    return max_height
+    return latest_block
 
 
 class QueryManager(ABC):
@@ -141,8 +148,48 @@ class TxQueryManager(QueryManager):
                 print(f'#tx {cls.counter.value:,.0f}')
 
 
-class BlockTxQueryManager(QueryManager):
+class TxLookupQueryManager(QueryManager):
+    counter = Value('d', 0)
 
+    @classmethod
+    def insert_lookup_table(cls, params):
+        idx_start, idx_end = params
+
+        for index in range(idx_start, idx_end, cls.concurrency):
+            param_list = deque()
+
+            curr_batch_size = min(cls.concurrency, idx_end - index)
+            for i in range(0, curr_batch_size):
+                t_id = index + i
+                tx = blocksci.Tx(t_id, cls.chain)
+                param_list.append(tx_short_summary(tx.hash, t_id))
+
+            results = execute_concurrent_with_args(
+                session=cls.session,
+                statement=cls.prepared_stmt,
+                parameters=param_list,
+                concurrency=cls.concurrency)
+
+            for (i, (success, _)) in enumerate(results):
+                if not success:
+                    while True:
+                        try:
+                            t_id = index + i
+                            tx = blocksci.Tx(t_id, cls.chain)
+                            cls.session.execute(cls.prepared_stmt,
+                                                tx_short_summary(tx.hash, t_id))
+                        except Exception as e:
+                            print(e)
+                            continue
+                        break
+
+            with cls.counter.get_lock():
+                cls.counter.value += curr_batch_size
+            if (cls.counter.value % 1e4) == 0:
+                print(f'#tx {cls.counter.value:,.0f}')
+
+
+class BlockTxQueryManager(QueryManager):
     counter = Value('d', 0)
 
     @classmethod
@@ -157,7 +204,9 @@ class BlockTxQueryManager(QueryManager):
             curr_batch_size = min(cls.concurrency, idx_end - index)
             for i in range(0, curr_batch_size):
                 block = cls.chain[index + i]
-                block_tx = [block.height, [tx_stats(x) for x in block.txes]]
+                block_tx = [int(block.height // BLOCK_BUCKET_SIZE),
+                            block.height,
+                            [tx_stats(x) for x in block.txes]]
                 param_list.append(block_tx)
 
             results = execute_concurrent_with_args(
@@ -278,15 +327,16 @@ def addr_str(addr_obj):
     return res
 
 
-def block_summary(block):
-    return (block.height,
+def block_summary(block, bucket_size):
+    return (int(block.height // bucket_size),
+            block.height,
             bytearray.fromhex(str(block.hash)),
             block.timestamp,
             len(block))
 
 
-def tx_stats(tx):
-    return (bytearray.fromhex(str(tx.hash)),
+def tx_stats(tx, bucket_size=TX_BUCKET_SIZE):
+    return (tx.index,
             len(tx.inputs),
             len(tx.outputs),
             tx.input_value,
@@ -297,12 +347,12 @@ def tx_io_summary(x):
     return [addr_str(x.address), x.value, address_type[repr(x.address_type)]]
 
 
-def tx_summary(tx):
+def tx_summary(tx, bucket_size=TX_BUCKET_SIZE):
     tx_inputs = [tx_io_summary(x) for x in tx.inputs]
     tx_outputs = [tx_io_summary(x) for x in tx.outputs]
-    return (str(tx.hash)[:5],
-            bytearray.fromhex(str(tx.hash)),
+    return (int(tx.index // bucket_size),
             tx.index,
+            bytearray.fromhex(str(tx.hash)),
             tx.block_height,
             int(tx.block_time.timestamp()),
             tx.is_coinbase,
@@ -311,6 +361,12 @@ def tx_summary(tx):
             list(tx_inputs),
             list(tx_outputs),
             blocksci.heuristics.is_coinjoin(tx))
+
+
+def tx_short_summary(tx_hash, t_id, prefix_length=TX_HASH_PREFIX_LENGTH):
+    return (str(tx_hash)[:prefix_length],
+            bytearray.fromhex(str(tx_hash)),
+            t_id)
 
 
 def insert_summary_stats(cluster, keyspace, last_block):
@@ -329,6 +385,9 @@ def create_parser():
     parser = ArgumentParser(description='Export dumped BlockSci data '
                                         'to Apache Cassandra',
                             epilog='GraphSense - http://graphsense.info')
+    parser.add_argument("--bip30-fix", action='store_true',
+                        help='ensure for duplicated tx hashes, that the most '
+                             'recent hash is ingested as specified in BIP30')
     parser.add_argument('-c', '--config', dest='blocksci_config',
                         required=True,
                         help='BlockSci configuration file')
@@ -385,7 +444,7 @@ def check_tables_arg(tables, table_list=['tx', 'block_tx', 'block', 'stats']):
             print('No tables specified in --tables/-t argument.')
             raise SystemExit(1)
         if set_diff:
-            print("Unknown table(s) in --tables/-t argument:")
+            print('Unknown table(s) in --tables/-t argument:')
             for elem in set_diff:
                 print(f'    {elem}')
             raise SystemExit(1)
@@ -398,8 +457,17 @@ def check_tables_arg(tables, table_list=['tx', 'block_tx', 'block', 'stats']):
     return list(table_list_intersect)
 
 
-def main():
+def upsert_btc_duplicate_hashes(session, stmt):
+    """Ensures for duplicated tx hashes that most recent transaction is
+       ingested, since BIP30 dictates that it is the newest version of these
+       transactions that is spendable.
+       See https://bitcoin.stackexchange.com/a/88667/48795"""
+    for tx, tid in [("e3bf3d07d4b0375638d5f1db5255fe07ba2c4cb067cd81b84ee974b6585fb468", 142841),
+                    ("d5d27987d2a3dfc724e359870c6644b40e497bdc0589a033220fe15429d88599", 142783)]:
+        session.execute(stmt, tx_short_summary(tx, tid))
 
+
+def main():
     parser = create_parser()
     args = parser.parse_args()
 
@@ -417,7 +485,7 @@ def main():
         most_recent_block = query_most_recent_block(cluster, args.keyspace)
         if most_recent_block is not None and \
            most_recent_block > last_parsed_block.height:
-            print("Error: inconsistent number of parsed and ingested blocks")
+            print('Error: inconsistent number of parsed and ingested blocks')
             raise SystemExit(1)
         if most_recent_block is None:
             next_block = 0
@@ -493,9 +561,9 @@ def main():
     if 'tx' in tables:
 
         print('Transactions ({:,.0f} tx)'.format(num_tx))
-        print('{:,.0f} <= tx_index < {:,.0f}'.format(*tx_index_range))
+        print('{:,.0f} <= tx id < {:,.0f}'.format(*tx_index_range))
         cql_str = '''INSERT INTO transaction
-                     (tx_prefix, tx_hash, tx_index, height,
+                     (tx_id_group, tx_id, tx_hash, block_id,
                       timestamp, coinbase, total_input, total_output,
                       inputs, outputs, coinjoin)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
@@ -504,14 +572,25 @@ def main():
         qm.execute(TxQueryManager.insert, tx_index_range)
         qm.close_pool()
 
+        print('Transactions by tx_hash lookup table')
+        cql_str = '''INSERT INTO transaction_by_tx_prefix
+                     (tx_prefix, tx_hash, tx_id)
+                     VALUES (?, ?, ?)'''
+        qm = TxLookupQueryManager(cluster, args.keyspace, chain, cql_str,
+                                  args.num_proc, args.num_chunks,
+                                  args.concurrency)
+        qm.execute(TxLookupQueryManager.insert_lookup_table, tx_index_range)
+        qm.close_pool()
+
     # block transactions
     if 'block_tx' in tables:
         print('Block transactions ({:,.0f} blocks)'.format(num_blocks))
         print('{:,.0f} <= block index < {:,.0f}'.format(*block_index_range))
         cql_str = '''INSERT INTO block_transactions
-                     (height, txs) VALUES (?, ?)'''
+                     (block_id_group, block_id, txs) VALUES (?, ?, ?)'''
         qm = BlockTxQueryManager(cluster, args.keyspace, chain, cql_str,
-                                 args.num_proc, args.num_chunks, args.concurrency)
+                                 args.num_proc, args.num_chunks,
+                                 args.concurrency)
         qm.execute(BlockTxQueryManager.insert, block_index_range)
         qm.close_pool()
 
@@ -520,9 +599,11 @@ def main():
         print('Blocks ({:,.0f} blocks)'.format(num_blocks))
         print('{:,.0f} <= block index < {:,.0f}'.format(*block_index_range))
         cql_str = '''INSERT INTO block
-                     (height, block_hash, timestamp, no_transactions)
-                     VALUES (?, ?, ?, ?)'''
-        generator = (block_summary(x) for x in block_range)
+                     (block_id_group, block_id, block_hash,
+                      timestamp, no_transactions)
+                     VALUES (?, ?, ?, ?, ?)'''
+        generator = (block_summary(x, int(BLOCK_BUCKET_SIZE))
+                     for x in block_range)
         insert(cluster, args.keyspace, cql_str, generator, args.concurrency)
 
     # summary statistics
@@ -530,6 +611,25 @@ def main():
         insert_summary_stats(cluster,
                              args.keyspace,
                              chain[block_range[-1].height])
+
+    # configuration details
+    session = cluster.connect(args.keyspace)
+    cql_str = '''INSERT INTO configuration
+                 (id, block_bucket_size, tx_prefix_length, tx_bucket_size)
+                 VALUES (%s, %s, %s, %s)'''
+    session.execute(cql_str,
+                    (args.keyspace,
+                     int(BLOCK_BUCKET_SIZE),
+                     int(TX_HASH_PREFIX_LENGTH),
+                     int(TX_BUCKET_SIZE)))
+
+    if 'tx' in tables and args.bip30_fix:  # handle BTC duplicate tx_hash issue
+        print("Applying fix for BIP30 (duplicate tx hashes)")
+        session = cluster.connect(args.keyspace)
+        cql_str = '''INSERT INTO transaction_by_tx_prefix
+                     (tx_prefix, tx_hash, tx_id) VALUES (?, ?, ?)'''
+        prep_stmt = session.prepare(cql_str)
+        upsert_btc_duplicate_hashes(session, prep_stmt)
 
     cluster.shutdown()
 

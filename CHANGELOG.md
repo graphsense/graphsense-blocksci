@@ -3,6 +3,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.5.1] 2021-11-29
+### Changed
+- Improved Cassandra schema
+- Store exchange rates for fiat currencies in list column
+- Improved handling of missing values in exchange rate ingest script
+### Added
+- Table `configuration`
+- Type hints
+
 ## [0.5.0] 2021-05-31
 ### Changed
 - Updated Python dependencies (`requirements.txt`)

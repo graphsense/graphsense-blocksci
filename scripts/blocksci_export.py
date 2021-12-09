@@ -34,7 +34,7 @@ address_type = {
 
 TX_HASH_PREFIX_LENGTH = 5
 TX_BUCKET_SIZE = 25_000
-BLOCK_BUCKET_SIZE = 100_000
+BLOCK_BUCKET_SIZE = 100
 
 
 def timing(f):

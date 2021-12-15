@@ -13,6 +13,7 @@ import time
 from cassandra import ConsistencyLevel
 from cassandra.cluster import Cluster
 from cassandra.concurrent import execute_concurrent_with_args
+from cassandra.query import SimpleStatement
 import numpy as np
 import blocksci
 
@@ -52,8 +53,9 @@ def query_most_recent_block(cluster, keyspace):
     '''Fetch most recent entry from blocks table, else return None.'''
 
     session = cluster.connect(keyspace)
-    result = session.execute(
-        f'SELECT block_id_group FROM {keyspace}.block PER PARTITION LIMIT 1')
+    cql_str = "SELECT block_id_group FROM block PER PARTITION LIMIT 1"
+    simple_stmt = SimpleStatement(cql_str, fetch_size=None)
+    result = session.execute(simple_stmt)
     groups = [row.block_id_group for row in result.current_rows]
 
     if len(groups) == 0:

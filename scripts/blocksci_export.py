@@ -13,6 +13,7 @@ import time
 from cassandra import ConsistencyLevel
 from cassandra.cluster import Cluster
 from cassandra.concurrent import execute_concurrent_with_args
+from cassandra.query import SimpleStatement
 import numpy as np
 import blocksci
 
@@ -34,7 +35,7 @@ address_type = {
 
 TX_HASH_PREFIX_LENGTH = 5
 TX_BUCKET_SIZE = 25_000
-BLOCK_BUCKET_SIZE = 100_000
+BLOCK_BUCKET_SIZE = 100
 
 
 def timing(f):
@@ -52,8 +53,9 @@ def query_most_recent_block(cluster, keyspace):
     '''Fetch most recent entry from blocks table, else return None.'''
 
     session = cluster.connect(keyspace)
-    result = session.execute(
-        f'SELECT block_id_group FROM {keyspace}.block PER PARTITION LIMIT 1')
+    cql_str = "SELECT block_id_group FROM block PER PARTITION LIMIT 1"
+    simple_stmt = SimpleStatement(cql_str, fetch_size=None)
+    result = session.execute(simple_stmt)
     groups = [row.block_id_group for row in result.current_rows]
 
     if len(groups) == 0:
@@ -397,9 +399,13 @@ def create_parser():
     parser.add_argument('--continue', action='store_true',
                         dest='continue_ingest',
                         help='continue ingest from last block/tx id')
-    parser.add_argument('-d', '--db_nodes', dest='db_nodes', nargs='+',
+    parser.add_argument('--db_nodes', dest='db_nodes', nargs='+',
                         default='localhost', metavar='DB_NODE',
                         help='list of Cassandra nodes; default "localhost")')
+    parser.add_argument('--db_port', dest='db_port',
+                        type=int, default=9042,
+                        help='Cassandra CQL native transport port; '
+                             'default 9042')
     parser.add_argument('-i', '--info', action='store_true',
                         help='display block information and exit')
     parser.add_argument('-k', '--keyspace', dest='keyspace', required=True,
@@ -479,7 +485,7 @@ def main():
           (last_parsed_block.height,
            dt.strftime(last_parsed_block.time, '%F %T')))
 
-    cluster = Cluster(args.db_nodes)
+    cluster = Cluster(args.db_nodes, port=args.db_port)
     if args.continue_ingest:
         # get most recent block from database
         most_recent_block = query_most_recent_block(cluster, args.keyspace)
@@ -555,7 +561,7 @@ def main():
     tables = check_tables_arg(args.tables)
     print('-' * 58)
 
-    cluster = Cluster(args.db_nodes)
+    cluster = Cluster(args.db_nodes, port=args.db_port)
 
     # transactions
     if 'tx' in tables:

@@ -399,9 +399,13 @@ def create_parser():
     parser.add_argument('--continue', action='store_true',
                         dest='continue_ingest',
                         help='continue ingest from last block/tx id')
-    parser.add_argument('-d', '--db_nodes', dest='db_nodes', nargs='+',
+    parser.add_argument('--db_nodes', dest='db_nodes', nargs='+',
                         default='localhost', metavar='DB_NODE',
                         help='list of Cassandra nodes; default "localhost")')
+    parser.add_argument('--db_port', dest='db_port',
+                        type=int, default=9042,
+                        help='Cassandra CQL native transport port; '
+                             'default 9042')
     parser.add_argument('-i', '--info', action='store_true',
                         help='display block information and exit')
     parser.add_argument('-k', '--keyspace', dest='keyspace', required=True,
@@ -481,7 +485,7 @@ def main():
           (last_parsed_block.height,
            dt.strftime(last_parsed_block.time, '%F %T')))
 
-    cluster = Cluster(args.db_nodes)
+    cluster = Cluster(args.db_nodes, port=args.db_port)
     if args.continue_ingest:
         # get most recent block from database
         most_recent_block = query_most_recent_block(cluster, args.keyspace)
@@ -557,7 +561,7 @@ def main():
     tables = check_tables_arg(args.tables)
     print('-' * 58)
 
-    cluster = Cluster(args.db_nodes)
+    cluster = Cluster(args.db_nodes, port=args.db_port)
 
     # transactions
     if 'tx' in tables:

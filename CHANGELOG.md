@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [0.5.2] 2022-03-09
+## [0.5.2] 2022-03-15
 ### Changed
 - Added `--db_port` argument to export script
 - Updated Python dependencies

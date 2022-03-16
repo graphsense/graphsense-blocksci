@@ -97,44 +97,42 @@ and use the `blocksci_export.py` script:
 
 ```
 python3 blocksci_export.py -h
-usage: blocksci_export.py [-h] -c BLOCKSCI_CONFIG [--continue]
-                          [-d DB_NODE [DB_NODE ...]] [-i] -k KEYSPACE
-                          [--processes NUM_PROC] [--chunks NUM_CHUNKS] [-p]
-                          [--start_index START_INDEX]
-                          [--end_index END_INDEX] [-t [TABLE [TABLE ...]]]
+usage: blocksci_export.py [-h] [--bip30-fix] -c BLOCKSCI_CONFIG [--concurrency CONCURRENCY]
+                          [--continue] --db-keyspace KEYSPACE [--db-nodes DB_NODE [DB_NODE ...]]
+                          [--db-port DB_PORT] [-i] [--processes NUM_PROC] [--chunks NUM_CHUNKS] [-p]
+                          [--start-index START_INDEX] [--end-index END_INDEX]
+                          [-t [TABLE [TABLE ...]]]
 
 Export dumped BlockSci data to Apache Cassandra
 
 optional arguments:
   -h, --help            show this help message and exit
+  --bip30-fix           ensure for duplicated tx hashes, that the most recent hash is ingested as
+                        specified in BIP30
   -c BLOCKSCI_CONFIG, --config BLOCKSCI_CONFIG
                         BlockSci configuration file
   --concurrency CONCURRENCY
                         Cassandra concurrency parameter (default 100)
   --continue            continue ingest from last block/tx id
-  -d DB_NODE [DB_NODE ...], --db_nodes DB_NODE [DB_NODE ...]
-                        list of Cassandra nodes; default "localhost")
-  -i, --info            display block information and exit
-  -k KEYSPACE, --keyspace KEYSPACE
+  --db-keyspace KEYSPACE
                         Cassandra keyspace
+  --db-nodes DB_NODE [DB_NODE ...]
+                        list of Cassandra nodes; default "localhost")
+  --db-port DB_PORT     Cassandra CQL native transport port; default 9042
+  -i, --info            display block information and exit
   --processes NUM_PROC  number of processes (default 1)
-  --chunks NUM_CHUNKS   number of chunks to split tx/block range (default
-                        `NUM_PROC`)
-  -p, --previous_day    only ingest blocks up to the previous day, since
-                        currency exchange rates might not be available for
-                        the current day
-  --start_index START_INDEX
+  --chunks NUM_CHUNKS   number of chunks to split tx/block range (default `NUM_PROC`)
+  -p, --previous-day    only ingest blocks up to the previous day, since currency exchange rates
+                        might not be available for the current day
+  --start-index START_INDEX
                         start index of the blocks to export (default 0)
-  --end_index END_INDEX
-                        only blocks with height smaller than or equal to
-                        this value are included; a negative index counts
-                        back from the end (default -1)
+  --end-index END_INDEX
+                        only blocks with height smaller than or equal to this value are included; a
+                        negative index counts back from the end (default -1)
   -t [TABLE [TABLE ...]], --tables [TABLE [TABLE ...]]
-                        list of tables to ingest, possible values: "block"
-                        (block table), "block_tx" (block transactions
-                        table), "tx" (transactions table), "stats" (summary
-                        statistics table); ingests all tables if not
-                        specified
+                        list of tables to ingest, possible values: "block" (block table), "block_tx"
+                        (block transactions table), "tx" (transactions table), "stats" (summary
+                        statistics table); ingests all tables if not specified
 
 GraphSense - http://graphsense.info
 ```

@@ -10,7 +10,6 @@ from itertools import islice
 from multiprocessing import Pool, Value
 import time
 
-from cassandra import ConsistencyLevel
 from cassandra.cluster import Cluster
 from cassandra.concurrent import execute_concurrent_with_args
 from cassandra.query import SimpleStatement
@@ -178,8 +177,9 @@ class TxLookupQueryManager(QueryManager):
                         try:
                             t_id = index + i
                             tx = blocksci.Tx(t_id, cls.chain)
-                            cls.session.execute(cls.prepared_stmt,
-                                                tx_short_summary(tx.hash, t_id))
+                            cls.session.execute(
+                                cls.prepared_stmt,
+                                tx_short_summary(tx.hash, t_id))
                         except Exception as e:
                             print(e)
                             continue
@@ -399,17 +399,17 @@ def create_parser():
     parser.add_argument('--continue', action='store_true',
                         dest='continue_ingest',
                         help='continue ingest from last block/tx id')
-    parser.add_argument('--db_nodes', dest='db_nodes', nargs='+',
+    parser.add_argument('--db-keyspace', dest='keyspace', required=True,
+                        help='Cassandra keyspace')
+    parser.add_argument('--db-nodes', dest='db_nodes', nargs='+',
                         default='localhost', metavar='DB_NODE',
                         help='list of Cassandra nodes; default "localhost")')
-    parser.add_argument('--db_port', dest='db_port',
+    parser.add_argument('--db-port', dest='db_port',
                         type=int, default=9042,
                         help='Cassandra CQL native transport port; '
                              'default 9042')
     parser.add_argument('-i', '--info', action='store_true',
                         help='display block information and exit')
-    parser.add_argument('-k', '--keyspace', dest='keyspace', required=True,
-                        help='Cassandra keyspace')
     parser.add_argument('--processes', dest='num_proc',
                         type=int, default=1,
                         help='number of processes (default 1)')
@@ -417,16 +417,16 @@ def create_parser():
                         type=int,
                         help='number of chunks to split tx/block range '
                              '(default `NUM_PROC`)')
-    parser.add_argument('-p', '--previous_day', dest='prev_day',
+    parser.add_argument('-p', '--previous-day', dest='prev_day',
                         action='store_true',
                         help='only ingest blocks up to the previous day, '
                              'since currency exchange rates might not be '
                              'available for the current day')
-    parser.add_argument('--start_index', dest='start_index',
+    parser.add_argument('--start-index', dest='start_index',
                         type=int, default=0,
                         help='start index of the blocks to export '
                              '(default 0)')
-    parser.add_argument('--end_index', dest='end_index',
+    parser.add_argument('--end-index', dest='end_index',
                         type=int, default=-1,
                         help='only blocks with height smaller than or equal '
                              'to this value are included; a negative index '

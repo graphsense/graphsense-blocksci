@@ -10,7 +10,6 @@ from itertools import islice
 from multiprocessing import Pool, Value
 import time
 
-from cassandra import ConsistencyLevel
 from cassandra.cluster import Cluster
 from cassandra.concurrent import execute_concurrent_with_args
 from cassandra.query import SimpleStatement
@@ -178,8 +177,9 @@ class TxLookupQueryManager(QueryManager):
                         try:
                             t_id = index + i
                             tx = blocksci.Tx(t_id, cls.chain)
-                            cls.session.execute(cls.prepared_stmt,
-                                                tx_short_summary(tx.hash, t_id))
+                            cls.session.execute(
+                                cls.prepared_stmt,
+                                tx_short_summary(tx.hash, t_id))
                         except Exception as e:
                             print(e)
                             continue

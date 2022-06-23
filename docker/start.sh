@@ -23,6 +23,7 @@ fi
 docker stop "$1" || true
 docker rm "$1" || true
 docker run --restart=always -d --name "$1" \
+    --ulimit core=0 \
     --network=graphsense-global-net \
     --cap-drop all \
     -v "$2":/var/data/block_data \

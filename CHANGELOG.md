@@ -3,6 +3,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.0.0] Unreleased
+### Changed
+- Disabled core files in Docker container
+- Switched to Blocksci `master` branch
+
 ## [0.5.2] 2022-03-16
 ### Changed
 - Added `--db_port` argument to export script

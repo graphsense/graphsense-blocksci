@@ -36,7 +36,6 @@ RUN ln -snf /usr/share/zoneinfo/UTC /etc/localtime && \
 RUN cd /opt && \
   git clone https://github.com/citp/BlockSci.git && \
   cd BlockSci && \
-  git checkout tags/v0.7.0 -b v0.7.0 && \
   git submodule init && \
   git submodule update --recursive
 

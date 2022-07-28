@@ -39,6 +39,11 @@ RUN cd /opt && \
   git submodule init && \
   git submodule update --recursive
 
+# apply patches
+COPY patches/0001-Changing-tx-version-to-Uint-LTC-uses-2-32-1-as-tx-ve.patch /opt/BlockSci/external/bitcoin-api-cpp
+
+RUN cd /opt/BlockSci/external/bitcoin-api-cpp && git apply 0001-Changing-tx-version-to-Uint-LTC-uses-2-32-1-as-tx-ve.patch
+
 # build
 RUN cd /opt/BlockSci && \
   export CC=/usr/bin/clang-7 && \

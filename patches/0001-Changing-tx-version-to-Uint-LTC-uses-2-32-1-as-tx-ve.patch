@@ -1,0 +1,48 @@
+From 04d8aad91305d4d2f21865c215ca250b1d44812c Mon Sep 17 00:00:00 2001
+From: soad003 <michael.froewis@gmx.at>
+Date: Thu, 28 Jul 2022 10:26:12 +0200
+Subject: [PATCH] Changing tx version to Uint (LTC uses 2^32-1 as tx version)
+
+---
+ src/bitcoinapi/bitcoinapi.cpp | 4 ++--
+ src/bitcoinapi/types.h        | 2 +-
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/bitcoinapi/bitcoinapi.cpp b/src/bitcoinapi/bitcoinapi.cpp
+index 0849150..68d63bd 100644
+--- a/src/bitcoinapi/bitcoinapi.cpp
++++ b/src/bitcoinapi/bitcoinapi.cpp
+@@ -1097,7 +1097,7 @@ getrawtransaction_t BitcoinAPI::getrawtransaction(const string& txid, int verbos
+ 
+ 	if(verbose != 0){
+ 		ret.txid = result["txid"].asString();
+-		ret.version = result["version"].asInt();
++		ret.version = result["version"].asUInt();
+ 		ret.locktime = result["locktime"].asUInt();
+ 		for (ValueIterator it = result["vin"].begin(); it != result["vin"].end();
+ 				it++) {
+@@ -1150,7 +1150,7 @@ decoderawtransaction_t BitcoinAPI::decoderawtransaction(const string& hexString)
+ 	result = sendcommand(command, params);
+ 
+ 	ret.txid = result["txid"].asString();
+-	ret.version = result["version"].asInt();
++	ret.version = result["version"].asUInt();
+ 	ret.locktime = result["locktime"].asUInt();
+ 	for (ValueIterator it = result["vin"].begin(); it != result["vin"].end();
+ 			it++) {
+diff --git a/src/bitcoinapi/types.h b/src/bitcoinapi/types.h
+index 671adb6..28b06e5 100644
+--- a/src/bitcoinapi/types.h
++++ b/src/bitcoinapi/types.h
+@@ -168,7 +168,7 @@
+ 
+ 	struct decoderawtransaction_t{
+ 		std::string txid;
+-		int version;
++		unsigned int version;
+ 		unsigned int locktime;
+ 		std::vector<vin_t> vin;
+ 		std::vector<vout_t> vout;
+-- 
+2.36.1
+

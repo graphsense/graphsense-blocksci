@@ -133,7 +133,7 @@ GraphSense - http://graphsense.info
 
 ## Exchange rates (DEPRECATED)
 
-Please use the graphsense-cli tool to ingest exchange rates. The scripts in this repository are will be removed in future versions. 
+Please use the graphsense-cli tool to ingest exchange rates. The scripts in this repository are will be removed in future versions. Please use the equivalent functionality provided in the [graphsense-lib repository][graphsense-cli].
 
 For Bitcoin we use the [CoinDesk API][coindesk] to obtain exchange rates, see
 `scripts/ingest_rates_coindesk.py`:

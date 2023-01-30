@@ -25,12 +25,6 @@ and test if it is running
 
     (1 rows)
 
-## Docker Compose setup
-
-An easy to use Docker Compose setup is provided by the
-[GraphSense Setup][graphsense-setup] component (see the README file and
-the `ingest` subdirectory).
-
 ## BlockSci Docker container
 
 Build docker image
@@ -137,7 +131,9 @@ optional arguments:
 GraphSense - http://graphsense.info
 ```
 
-## Exchange rates
+## Exchange rates (DEPRECATED)
+
+Please use the graphsense-cli tool to ingest exchange rates. The scripts in this repository are will be removed in future versions. 
 
 For Bitcoin we use the [CoinDesk API][coindesk] to obtain exchange rates, see
 `scripts/ingest_rates_coindesk.py`:
@@ -196,7 +192,17 @@ optional arguments:
 GraphSense - http://graphsense.info
 ```
 
+## Docker Compose setup (DEPRECATED)
+
+The graphsense setup components is deprecated and will be replaced in a future version
+
+An easy to use Docker Compose setup is provided by the
+[GraphSense Setup][graphsense-setup] component (see the README file and
+the `ingest` subdirectory).
+
+
 [apache-cassandra]: http://cassandra.apache.org/download
 [graphsense-setup]: https://github.com/graphsense/graphsense-setup
 [coindesk]: https://www.coindesk.com/api
 [coinmarketcap]: https://coinmarketcap.com
+[graphsense-cli]: https://github.com/graphsense/graphsense-lib#exchange-rates

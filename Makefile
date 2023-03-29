@@ -1,4 +1,4 @@
-RELEASE := 'v23.01'
+RELEASE := 'v23.03'
 RELEASESEM := 'v1.3.0'
 
 all: build

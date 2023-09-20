@@ -3,6 +3,8 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [23.09/1.4.0] - 2023-09-20
+
 ## [23.06/1.4.0] - 2023-06-12
 ### Removed
 - coindesk and coimarket script exchange rates scripts -> graphsense-lib provides the same features

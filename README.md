@@ -1,4 +1,25 @@
-# A dockerized component to synchronize BlockSci data to Apache Cassandra
+# A dockerized component to synchronize BlockSci data to Apache Cassandra (DEPRECATED)
+
+This repository is deprecated and will soon be archived.
+
+The [graphsense-lib]( https://github.com/graphsense/graphsense-lib) supersede this repository, it provides the same functionality e.g. to import btc/ltc/... data into cassandra use
+
+    graphsense-cli -v ingest from-node -e dev -c ltc --previous_day --batch-size 100 --create-schema
+
+This requires a properly configured gs config file. The default location is ~/.graphsense.yaml. An example dev environment config could look as follows
+
+
+    environments:
+      dev:
+        cassandra_nodes:
+        - localhost
+        keyspaces:
+            ltc:
+                raw_keyspace_name: ltc_raw
+                transformed_keyspace_name: ltc_transformed
+                schema_type: utxo
+                ingest_config:
+                  node_reference: http://[user]:[pw]@localhost:8532
 
 ## Prerequisites
 
